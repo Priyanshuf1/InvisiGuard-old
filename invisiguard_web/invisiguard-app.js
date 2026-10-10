@@ -1677,25 +1677,39 @@ class InvisiGuardApp {
     this.state.var = typeof feat.variance === 'number' ? feat.variance : 0;
     this.state.mot = typeof feat.motion_band_power === 'number' ? feat.motion_band_power : 0;
 
-    if (this.state.presence) {
-      this.state.hr = vit.heart_rate_bpm || 72;
-      this.state.br = vit.breathing_rate_bpm || 16;
-      this.state.breathing_band_power = typeof feat.breathing_band_power === 'number' ? feat.breathing_band_power : 0.18;
-
-      if (msg.triage) this.state.triage = msg.triage;
-      if (msg.dsp_filtering) this.state.dspFiltering = msg.dsp_filtering;
-
+    if (this.scenario && this.scenario !== 'auto') {
+      if (this.scenario === 'empty') {
+        this.state.presence = false;
+        this.state.pose = 'standing';
+      } else {
+        this.state.presence = true;
+        if (this.scenario === 'sleep' || this.scenario === 'fever') this.state.pose = 'sleep';
+        else if (this.scenario === 'study') this.state.pose = 'study';
+        else if (this.scenario === 'fall') this.state.pose = 'fallen';
+        else if (this.scenario === 'active') this.state.pose = 'active';
+        else this.state.pose = 'standing';
+      }
+    } else if (this.state.presence) {
       if (this.state.fall) this.state.pose = 'fallen';
       else if (this.state.triage && (this.state.triage.state === 'HEALTHY_RESTFUL_SLEEP' || this.state.triage.state === 'SICK_HIGH_FEVER')) this.state.pose = 'sleep';
       else if (this.state.mlClass === 'NORMAL_STUDYING') this.state.pose = 'study';
       else if (this.state.mot > 0.15 || cls.motion_level === 'active' || this.state.struggle) this.state.pose = 'active';
       else this.state.pose = 'standing';
     } else {
+      this.state.pose = 'standing';
+    }
+
+    if (this.state.presence) {
+      this.state.hr = vit.heart_rate_bpm || 72;
+      this.state.br = vit.breathing_rate_bpm || 16;
+      this.state.breathing_band_power = typeof feat.breathing_band_power === 'number' ? feat.breathing_band_power : 0.18;
+      if (msg.triage) this.state.triage = msg.triage;
+      if (msg.dsp_filtering) this.state.dspFiltering = msg.dsp_filtering;
+    } else {
       this.state.hr = 0;
       this.state.br = 0;
       this.state.conf = 0;
       this.state.breathing_band_power = 0;
-      this.state.pose = 'standing';
       if (msg.triage) this.state.triage = msg.triage;
     }
 

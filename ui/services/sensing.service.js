@@ -446,7 +446,7 @@ class SensingService {
     // ADR-295: only the verified/unverified live states may show "live"; any
     // synthetic/stale/disconnected state must not.
     if (sourceState) {
-      if (sourceState === 'live_verified' || sourceState === 'live_unverified') {
+      if (sourceState === 'live' || sourceState === 'live_verified' || sourceState === 'live_unverified') {
         this._setDataSource('live');
       } else if (sourceState === 'synthetic') {
         this._setDataSource('server-simulated');
