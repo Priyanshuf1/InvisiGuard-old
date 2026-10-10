@@ -93,7 +93,13 @@ def simulate_version_comparison(version_str: str) -> bool:
         return False
 
 
-@pytest.mark.parametrize("payload", ADVERSARIAL_PAYLOADS)
+def _payload_id(payload):
+    if isinstance(payload, (bytes, str)) and len(payload) > 50:
+        return f"{type(payload).__name__}_{len(payload)}"
+    return None
+
+
+@pytest.mark.parametrize("payload", ADVERSARIAL_PAYLOADS, ids=_payload_id)
 def test_openssl_version_handling_security_invariant(payload):
     """Invariant: Adversarial inputs must not cause unsafe behavior when processed
     as version strings or package metadata. Version parsing must remain safe and

@@ -32,6 +32,10 @@
       </div>
 
       <div class="header-actions">
+        <a href="/" class="btn-toggle-source" style="text-decoration: none; color: inherit; display: inline-flex; align-items: center; gap: 6px;" title="Switch to RuView WiFi DensePose Platform">
+          ⮌ <span style="font-weight:600">RuView DensePose</span>
+        </a>
+
         <div class="status-badge">
           <span class="status-dot disconnected" id="status-dot"></span>
           <span id="status-label">DISCONNECTED (0 NODES)</span>
@@ -78,16 +82,27 @@
       <!-- Overlay Controls -->
       <div class="bedroom-overlay">
         <div class="bedroom-controls">
-          <span>Scenario:</span>
-          <select id="scenario-select">
-            <option value="auto">Auto-Cycle (30s)</option>
-            <option value="vitals">Vital Signs (Breathing)</option>
-            <option value="study">Study (Seated at Desk)</option>
-            <option value="sleep">Sleep Monitor (Bed)</option>
-            <option value="walking">Room Pacing (Walking)</option>
-            <option value="fall">Fall Event Detection</option>
-            <option value="empty">Empty Room</option>
-          </select>
+          <div class="tier-pill-group" id="tier-pill-group">
+            <span class="ctrl-label" style="font-size:11px; color:var(--text-label); font-weight:600; margin-right:4px;">RF TIER:</span>
+            <button type="button" class="tier-pill active" data-nodes="auto" id="tier-pill-auto" title="Auto-detect from hardware (1 Live ESP32)">Auto (Live)</button>
+            <button type="button" class="tier-pill" data-nodes="1" id="tier-pill-1" title="1 ESP32: Volumetric Green Fog RF Disruption Cloud">1 Node Fog</button>
+            <button type="button" class="tier-pill" data-nodes="3" id="tier-pill-3" title="3 ESP32s: 3D Spatial Presence Envelope">3 Nodes Envelope</button>
+            <button type="button" class="tier-pill" data-nodes="4" id="tier-pill-4" title="4+ ESP32s: 17-Keypoint WiFi DensePose Skeleton">4+ Nodes Skeleton</button>
+          </div>
+
+          <div class="scenario-wrap" id="scenario-wrap" style="display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--bg-border); padding-left: 10px;">
+            <span style="font-size:11px; color:var(--text-label); font-weight:600;">Scenario:</span>
+            <select id="scenario-select">
+              <option value="auto">Live Telemetry (Auto)</option>
+              <option value="sleep">Sleep Monitor (Bed)</option>
+              <option value="fever">Sick Student (Fever / High RR)</option>
+              <option value="study">Study (Seated at Desk)</option>
+              <option value="vitals">Vital Signs (Breathing)</option>
+              <option value="active">Active Motion (Doppler)</option>
+              <option value="fall">Fall Event Detection</option>
+              <option value="empty">Empty Room</option>
+            </select>
+          </div>
         </div>
 
         <div class="bedroom-actions">
@@ -96,13 +111,24 @@
       </div>
 
       <div class="bedroom-status-strip">
-        <div class="strip-item"><span class="strip-dot">&#9673;</span> Single-Antenna ESP32 CSI</div>
+        <div class="strip-item" id="strip-tier-info">
+          <span class="strip-dot" id="strip-tier-dot" style="background:#00d878;">●</span>
+          <span id="strip-tier-text">TIER 1 · VOLUMETRIC GREEN FOG RF DISRUPTION CLOUD (1 ESP32 LIVE)</span>
+        </div>
         <div class="strip-divider"></div>
-        <div class="strip-item"><span class="strip-dot">&#9825;</span> Doppler Vitals</div>
+        <div class="strip-item">
+          <span>Doppler Respiration: <strong id="hud-breath-power" style="color:var(--green-bright);">0.18</strong></span>
+        </div>
         <div class="strip-divider"></div>
-        <div class="strip-item"><span class="strip-dot">&#9889;</span> Fall Detection</div>
+        <div class="strip-item">
+          <span>Motion Power: <strong id="hud-motion-power" style="color:var(--terra-sun);">0.02</strong></span>
+        </div>
         <div class="strip-divider"></div>
-        <div class="strip-item">Drag to Orbit &middot; Scroll to Zoom</div>
+        <div class="strip-item">
+          <span>Vitals: <strong id="hud-vitals-summary" style="color:var(--green-bright);">72 BPM / 16 RPM</strong></span>
+        </div>
+        <div class="strip-divider"></div>
+        <div class="strip-item" style="color: var(--text-dim); font-size: 11px;">Orbit: Drag &middot; Zoom: Scroll</div>
       </div>
     </section>
 
@@ -640,6 +666,6 @@
   </script>
 
   <!-- Application Controller -->
-  <script type="module" src="invisiguard-app.js"></script>
+  <script type="module" src="invisiguard-app.js?v=20261011_v1"></script>
 </body>
 </html>

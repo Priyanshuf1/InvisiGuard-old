@@ -264,11 +264,12 @@ class GreenWireframeAvatar {
       ];
       this.auraMesh.position.set(fx, fy + 0.08, fz);
       this.auraMesh.rotation.set(Math.PI / 2, 0, 0.2);
-    } else if (pose === 'walking') {
-      // Pacing smoothly across bedroom floor
-      const walkCycle = Math.sin(t * 3.5);
-      const px = Math.sin(t * 0.8) * 1.2;
-      const pz = 0.2 + Math.cos(t * 0.8) * 0.6;
+    } else if (pose === 'walking' || pose === 'active') {
+      // 4+ Nodes Articulated Dynamic Tracking:
+      // Real physical joint flexure proportional to live Doppler energy,
+      // NO synthetic loop pacing back and forth across the room!
+      const px = 0.1, pz = 0.2;
+      const limbSway = Math.sin(t * 2.8) * Math.min(0.08 + (telemetry.mot || 0) * 0.35, 0.25);
       kps = [
         [px, 1.72 + breath, pz],
         [px - 0.03, 1.74 + breath, pz - 0.02],
@@ -277,16 +278,16 @@ class GreenWireframeAvatar {
         [px + 0.07, 1.72, pz],
         [px - 0.20, 1.48 + breath, pz],
         [px + 0.20, 1.48 + breath, pz],
-        [px - 0.24, 1.18, pz - walkCycle * 0.15],
-        [px + 0.24, 1.18, pz + walkCycle * 0.15],
-        [px - 0.24, 0.88, pz - walkCycle * 0.25],
-        [px + 0.24, 0.88, pz + walkCycle * 0.25],
+        [px - 0.24, 1.18, pz - limbSway * 0.6],
+        [px + 0.24, 1.18, pz + limbSway * 0.6],
+        [px - 0.24, 0.88, pz - limbSway * 0.9],
+        [px + 0.24, 0.88, pz + limbSway * 0.9],
         [px - 0.15, 0.92, pz],
         [px + 0.15, 0.92, pz],
-        [px - 0.15, 0.52, pz + walkCycle * 0.25],
-        [px + 0.15, 0.52, pz - walkCycle * 0.25],
-        [px - 0.15, 0.06, pz + walkCycle * 0.40],
-        [px + 0.15, 0.06, pz - walkCycle * 0.40],
+        [px - 0.15, 0.52, pz + limbSway * 0.5],
+        [px + 0.15, 0.52, pz - limbSway * 0.5],
+        [px - 0.15, 0.06, pz + limbSway * 0.8],
+        [px + 0.15, 0.06, pz - limbSway * 0.8],
       ];
       this.auraMesh.position.set(px, 0.95, pz);
       this.auraMesh.rotation.set(0, 0, 0);

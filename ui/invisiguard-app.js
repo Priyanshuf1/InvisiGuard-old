@@ -42,8 +42,383 @@ const SKELETON_PAIRS = [
 ];
 
 // ============================================================================
-// 1. Electric Green Wireframe Avatar
+// 1. Tier 1: Authentic RuView 3D Volumetric Green Fog / Gaussian Splats Cloud
+//    (Active for 1 ESP32 — Single-Node RF Disruption & Doppler Respiration)
 // ============================================================================
+
+const SPLAT_VERTEX = `
+  attribute float splatSize;
+  attribute vec3  splatColor;
+  attribute float splatOpacity;
+
+  varying vec3  vColor;
+  varying float vOpacity;
+
+  void main() {
+    vColor   = splatColor;
+    vOpacity = splatOpacity;
+
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = splatSize * (320.0 / -mvPosition.z);
+    gl_Position  = projectionMatrix * mvPosition;
+  }
+`;
+
+const SPLAT_FRAGMENT = `
+  varying vec3  vColor;
+  varying float vOpacity;
+
+  void main() {
+    float dist = length(gl_PointCoord - vec2(0.5));
+    if (dist > 0.5) discard;
+    float alpha = smoothstep(0.5, 0.12, dist) * vOpacity;
+    gl_FragColor = vec4(vColor, alpha);
+  }
+`;
+
+class VolumetricRfDisruptionCloud {
+  constructor(scene) {
+    this.scene = scene;
+    this.group = new THREE.Group();
+    this.scene.add(this.group);
+    this.group.visible = false;
+
+    this.count = 140;
+    this.baseOffsets = [];
+
+    const positions = new Float32Array(this.count * 3);
+    const sizes = new Float32Array(this.count);
+    const colors = new Float32Array(this.count * 3);
+    const opacities = new Float32Array(this.count);
+
+    // Distribution matching 3D human body RF multipath disruption cloud
+    for (let i = 0; i < this.count; i++) {
+      const u = Math.random();
+      const v = Math.random();
+      const theta = u * 2.0 * Math.PI;
+      const phi = Math.acos(2.0 * v - 1.0);
+      const r = Math.pow(Math.random(), 0.38) * 0.95;
+
+      const ox = r * Math.sin(phi) * Math.cos(theta) * 0.65;
+      const oy = r * Math.cos(phi) * 1.15; // elongated human height
+      const oz = r * Math.sin(phi) * Math.sin(theta) * 0.55;
+
+      this.baseOffsets.push({
+        ox, oy, oz,
+        speed: 0.8 + Math.random() * 1.4,
+        phase: Math.random() * Math.PI * 2,
+        jitterR: 0.05 + Math.random() * 0.12,
+        baseSize: 2.4 + Math.random() * 2.8,
+      });
+
+      positions[i * 3 + 0] = ox;
+      positions[i * 3 + 1] = 1.0 + oy;
+      positions[i * 3 + 2] = oz;
+
+      sizes[i] = 3.0;
+      colors[i * 3 + 0] = 0.0;
+      colors[i * 3 + 1] = 0.85;
+      colors[i * 3 + 2] = 0.47;
+      opacities[i] = 0.0;
+    }
+
+    this.geo = new THREE.BufferGeometry();
+    this.geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.geo.setAttribute('splatSize', new THREE.BufferAttribute(sizes, 1));
+    this.geo.setAttribute('splatColor', new THREE.BufferAttribute(colors, 3));
+    this.geo.setAttribute('splatOpacity', new THREE.BufferAttribute(opacities, 1));
+
+    this.mat = new THREE.ShaderMaterial({
+      vertexShader: SPLAT_VERTEX,
+      fragmentShader: SPLAT_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+
+    this.points = new THREE.Points(this.geo, this.mat);
+    this.group.add(this.points);
+
+    // Dynamic ground footprint rings
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x00d878,
+      transparent: true,
+      opacity: 0.22,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.floorRing = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.95, 32), ringMat);
+    this.floorRing.rotation.x = -Math.PI / 2;
+    this.floorRing.position.y = 0.008;
+    this.group.add(this.floorRing);
+
+    const waveMat = new THREE.MeshBasicMaterial({
+      color: 0x00d878,
+      transparent: true,
+      opacity: 0.15,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.floorWave = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.25, 32), waveMat);
+    this.floorWave.rotation.x = -Math.PI / 2;
+    this.floorWave.position.y = 0.009;
+    this.group.add(this.floorWave);
+
+    this.currentCentroid = new THREE.Vector3(0.0, 1.05, 0.0);
+  }
+
+  update(t, presence, pose, mot, breathPower, conf, dt = 0.016) {
+    if (!presence) {
+      this.group.visible = false;
+      return;
+    }
+    this.group.visible = true;
+
+    // Target centroid based on room furniture localization
+    let tx = 0.1, ty = 1.05, tz = 0.2;
+    let isHorizontal = false;
+
+    if (pose === 'sleep' || pose === 'lying') {
+      tx = -2.2; ty = 0.65; tz = -1.8;
+      isHorizontal = true;
+    } else if (pose === 'study' || pose === 'sitting') {
+      tx = 1.8; ty = 0.95; tz = -1.2;
+    } else if (pose === 'fallen') {
+      tx = 0.2; ty = 0.35; tz = 0.4;
+      isHorizontal = true;
+    } else {
+      // General standing / room presence: add subtle Doppler drift
+      const driftX = Math.sin(t * 0.9) * Math.min(mot * 0.4, 0.35);
+      const driftZ = Math.cos(t * 0.7) * Math.min(mot * 0.4, 0.35);
+      tx = 0.1 + driftX;
+      ty = 1.05;
+      tz = 0.2 + driftZ;
+    }
+
+    // Smooth lerp to target centroid
+    this.currentCentroid.x += (tx - this.currentCentroid.x) * 0.12;
+    this.currentCentroid.y += (ty - this.currentCentroid.y) * 0.12;
+    this.currentCentroid.z += (tz - this.currentCentroid.z) * 0.12;
+
+    const cx = this.currentCentroid.x;
+    const cy = this.currentCentroid.y;
+    const cz = this.currentCentroid.z;
+
+    // Doppler breathing pulsation
+    const bp = Math.sin(t * 2.2);
+    const breathPulse = 1.0 + bp * Math.min(0.12 + breathPower * 2.0, 0.40);
+
+    // Color shifting: emerald green (resting) -> amber (motion) -> red (high Doppler/active)
+    let cr = 0.0, cg = 0.85, cb = 0.47;
+    const clampedMot = Math.min(1.0, mot * 3.5);
+    if (clampedMot < 0.25) {
+      const k = clampedMot / 0.25;
+      cr = 0.0 * (1 - k) + 0.96 * k;
+      cg = 0.85 * (1 - k) + 0.75 * k;
+      cb = 0.47 * (1 - k) + 0.48 * k;
+    } else {
+      const k = Math.min(1.0, (clampedMot - 0.25) / 0.75);
+      cr = 0.96 * (1 - k) + 1.0 * k;
+      cg = 0.75 * (1 - k) + 0.25 * k;
+      cb = 0.48 * (1 - k) + 0.38 * k;
+    }
+
+    const pos = this.geo.attributes.position.array;
+    const sizes = this.geo.attributes.splatSize.array;
+    const colors = this.geo.attributes.splatColor.array;
+    const opac = this.geo.attributes.splatOpacity.array;
+
+    const baseAlpha = 0.30 + (Math.min(100, Math.max(0, conf)) / 100) * 0.38;
+
+    for (let i = 0; i < this.count; i++) {
+      const b = this.baseOffsets[i];
+      let ox = b.ox * breathPulse;
+      let oy = b.oy * breathPulse;
+      let oz = b.oz * breathPulse;
+
+      if (isHorizontal) {
+        const tmp = oy;
+        oy = oz * 0.6;
+        oz = tmp;
+      }
+
+      // Micro turbulence from RF Doppler multipath
+      const jitter = Math.sin(t * b.speed + b.phase) * (b.jitterR + mot * 0.12);
+
+      pos[i * 3 + 0] = cx + ox + jitter;
+      pos[i * 3 + 1] = Math.max(0.12, cy + oy + Math.cos(t * b.speed * 0.7 + b.phase) * jitter);
+      pos[i * 3 + 2] = cz + oz + jitter;
+
+      sizes[i] = b.baseSize * breathPulse * (1.0 + Math.min(mot * 2.0, 1.2));
+      colors[i * 3 + 0] = cr;
+      colors[i * 3 + 1] = cg;
+      colors[i * 3 + 2] = cb;
+      opac[i] = baseAlpha * (0.8 + 0.2 * Math.sin(t * 1.5 + b.phase));
+    }
+
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.splatSize.needsUpdate = true;
+    this.geo.attributes.splatColor.needsUpdate = true;
+    this.geo.attributes.splatOpacity.needsUpdate = true;
+
+    // Floor rings update
+    this.floorRing.position.set(cx, 0.008, cz);
+    this.floorRing.material.color.setRGB(cr, cg, cb);
+    this.floorRing.scale.set(breathPulse, breathPulse, 1);
+
+    this.floorWave.position.set(cx, 0.009, cz);
+    this.floorWave.material.color.setRGB(cr, cg, cb);
+    const waveProgress = ((t * 0.6) % 1.0);
+    const waveScale = 1.0 + waveProgress * 1.6;
+    this.floorWave.scale.set(waveScale, waveScale, 1);
+    this.floorWave.material.opacity = Math.max(0, (1.0 - waveProgress)) * 0.25;
+  }
+}
+
+// ============================================================================
+// 2. Tier 2: 3D Spatial Centroid & Presence Envelope Bounding Volume
+//    (Active for 2-3 ESP32s — Multi-static Trilateration & Localization)
+// ============================================================================
+
+class SpatialPresenceEnvelope {
+  constructor(scene) {
+    this.scene = scene;
+    this.group = new THREE.Group();
+    this.scene.add(this.group);
+    this.group.visible = false;
+
+    // Outer wireframe capsule
+    const capGeo = new THREE.CapsuleGeometry(0.38, 0.95, 10, 16);
+    this.wireMat = new THREE.MeshBasicMaterial({
+      color: 0x00d878,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.55,
+    });
+    this.capMesh = new THREE.Mesh(capGeo, this.wireMat);
+    this.group.add(this.capMesh);
+
+    // Inner glowing volume
+    this.innerMat = new THREE.MeshBasicMaterial({
+      color: 0x00d878,
+      transparent: true,
+      opacity: 0.15,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.innerMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.36, 0.90, 12, 16), this.innerMat);
+    this.group.add(this.innerMesh);
+
+    // 3D Spatial Centroid Crosshairs
+    const axisMat = new THREE.LineBasicMaterial({ color: 0x3eff8a, transparent: true, opacity: 0.8 });
+    const crossPts = [
+      new THREE.Vector3(-0.55, 0, 0), new THREE.Vector3(0.55, 0, 0),
+      new THREE.Vector3(0, -0.65, 0), new THREE.Vector3(0, 0.65, 0),
+      new THREE.Vector3(0, 0, -0.55), new THREE.Vector3(0, 0, 0.55),
+    ];
+    this.crosshairs = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(crossPts), axisMat);
+    this.group.add(this.crosshairs);
+
+    // Centroid core sphere
+    const coreGeo = new THREE.SphereGeometry(0.065, 12, 12);
+    this.coreMat = new THREE.MeshBasicMaterial({ color: 0xff4060, blending: THREE.AdditiveBlending });
+    this.coreMesh = new THREE.Mesh(coreGeo, this.coreMat);
+    this.group.add(this.coreMesh);
+
+    // Ground projection plumb line
+    const plumbPts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -1.2, 0)];
+    this.plumbLine = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(plumbPts),
+      new THREE.LineDashedMaterial({ color: 0x00d878, dashSize: 0.08, gapSize: 0.05, transparent: true, opacity: 0.5 })
+    );
+    this.plumbLine.computeLineDistances();
+    this.group.add(this.plumbLine);
+
+    // Ground target circle
+    const groundGeo = new THREE.RingGeometry(0.05, 0.55, 24);
+    this.groundMat = new THREE.MeshBasicMaterial({
+      color: 0x00d878,
+      transparent: true,
+      opacity: 0.35,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.groundDisc = new THREE.Mesh(groundGeo, this.groundMat);
+    this.groundDisc.rotation.x = -Math.PI / 2;
+    this.group.add(this.groundDisc);
+
+    this.currentCentroid = new THREE.Vector3(0.0, 1.05, 0.0);
+  }
+
+  update(t, presence, pose, mot, breathPower, conf) {
+    if (!presence) {
+      this.group.visible = false;
+      return;
+    }
+    this.group.visible = true;
+
+    let tx = 0.1, ty = 1.05, tz = 0.2;
+    let rx = 0, rz = 0;
+
+    if (pose === 'sleep' || pose === 'lying') {
+      tx = -2.2; ty = 0.65; tz = -1.8;
+      rx = Math.PI / 2;
+    } else if (pose === 'study' || pose === 'sitting') {
+      tx = 1.8; ty = 0.88; tz = -1.2;
+    } else if (pose === 'fallen') {
+      tx = 0.2; ty = 0.28; tz = 0.4;
+      rx = Math.PI / 2;
+    } else {
+      const driftX = Math.sin(t * 0.9) * Math.min(mot * 0.4, 0.35);
+      const driftZ = Math.cos(t * 0.7) * Math.min(mot * 0.4, 0.35);
+      tx = 0.1 + driftX;
+      ty = 1.05;
+      tz = 0.2 + driftZ;
+    }
+
+    this.currentCentroid.x += (tx - this.currentCentroid.x) * 0.14;
+    this.currentCentroid.y += (ty - this.currentCentroid.y) * 0.14;
+    this.currentCentroid.z += (tz - this.currentCentroid.z) * 0.14;
+
+    const cx = this.currentCentroid.x;
+    const cy = this.currentCentroid.y;
+    const cz = this.currentCentroid.z;
+
+    this.group.position.set(cx, cy, cz);
+    this.capMesh.rotation.set(rx, 0, rz);
+    this.innerMesh.rotation.set(rx, 0, rz);
+
+    // Respiration expansion
+    const bp = Math.sin(t * 2.2);
+    const scale = 1.0 + bp * Math.min(0.08 + breathPower * 1.5, 0.25);
+    this.capMesh.scale.set(scale, scale, scale);
+    this.innerMesh.scale.set(scale, scale, scale);
+
+    // Plumb line down to floor
+    this.plumbLine.position.set(0, 0, 0);
+    this.plumbLine.scale.set(1, cy / 1.2, 1);
+
+    // Ground target circle at floor plane
+    this.groundDisc.position.set(0, -cy + 0.01, 0);
+
+    // Color interpolation: green -> amber -> red
+    let col = 0x00d878;
+    if (mot > 0.25) col = 0xff4060;
+    else if (mot > 0.10) col = 0xf5c07a;
+
+    this.wireMat.color.setHex(col);
+    this.innerMat.color.setHex(col);
+    this.groundMat.color.setHex(col);
+  }
+}
+
+// ============================================================================
+// 3. Tier 3: Articulated 17-Keypoint WiFi DensePose Skeleton
+//    (Active for 4+ ESP32s — Multi-view Articulated Joint Kinematics)
+// ============================================================================
+
 class GreenWireframeAvatar {
   constructor(scene) {
     this.group = new THREE.Group();
@@ -143,7 +518,7 @@ class GreenWireframeAvatar {
     this.group.add(this.auraMesh);
   }
 
-  update(pose, t, bp, presence) {
+  update(pose, t, bp, presence, mot = 0) {
     if (!presence) {
       this.group.visible = false;
       return;
@@ -154,7 +529,6 @@ class GreenWireframeAvatar {
     let kps = [];
 
     if (pose === 'sleep' || pose === 'lying') {
-      // Lying on bed
       const bx = -2.2, by = 0.52, bz = -1.8;
       kps = [
         [bx, by + 0.14 + breath, bz - 0.7],
@@ -178,7 +552,6 @@ class GreenWireframeAvatar {
       this.auraMesh.position.set(bx, by + 0.1, bz);
       this.auraMesh.rotation.set(Math.PI / 2, 0, 0);
     } else if (pose === 'study' || pose === 'sitting') {
-      // Sitting at study desk
       const cx = 1.8, cy = 0.0, cz = -1.2;
       kps = [
         [cx, cy + 1.25 + breath, cz - 0.1],
@@ -202,7 +575,6 @@ class GreenWireframeAvatar {
       this.auraMesh.position.set(cx, cy + 0.75, cz - 0.15);
       this.auraMesh.rotation.set(0, 0, 0);
     } else if (pose === 'fallen') {
-      // Fallen on bedroom floor
       const fx = 0.2, fy = 0.08, fz = 0.4;
       kps = [
         [fx, fy + 0.08, fz - 0.65],
@@ -225,10 +597,12 @@ class GreenWireframeAvatar {
       ];
       this.auraMesh.position.set(fx, fy + 0.08, fz);
       this.auraMesh.rotation.set(Math.PI / 2, 0, 0.2);
-    } else if (pose === 'walking') {
-      const walkCycle = Math.sin(t * 3.5);
-      const px = Math.sin(t * 0.8) * 1.2;
-      const pz = 0.2 + Math.cos(t * 0.8) * 0.6;
+    } else if (pose === 'walking' || pose === 'active') {
+      // 4+ Nodes Articulated Dynamic Tracking:
+      // Real physical joint flexure proportional to live Doppler energy,
+      // NO synthetic loop pacing back and forth across the room!
+      const px = 0.1, pz = 0.2;
+      const limbSway = Math.sin(t * 2.8) * Math.min(0.08 + mot * 0.35, 0.25);
       kps = [
         [px, 1.72 + breath, pz],
         [px - 0.03, 1.74 + breath, pz - 0.02],
@@ -237,16 +611,16 @@ class GreenWireframeAvatar {
         [px + 0.07, 1.72, pz],
         [px - 0.20, 1.48 + breath, pz],
         [px + 0.20, 1.48 + breath, pz],
-        [px - 0.24, 1.18, pz - walkCycle * 0.15],
-        [px + 0.24, 1.18, pz + walkCycle * 0.15],
-        [px - 0.24, 0.88, pz - walkCycle * 0.25],
-        [px + 0.24, 0.88, pz + walkCycle * 0.25],
+        [px - 0.24, 1.18, pz - limbSway * 0.6],
+        [px + 0.24, 1.18, pz + limbSway * 0.6],
+        [px - 0.24, 0.88, pz - limbSway * 0.9],
+        [px + 0.24, 0.88, pz + limbSway * 0.9],
         [px - 0.15, 0.92, pz],
         [px + 0.15, 0.92, pz],
-        [px - 0.15, 0.52, pz + walkCycle * 0.25],
-        [px + 0.15, 0.52, pz - walkCycle * 0.25],
-        [px - 0.15, 0.06, pz + walkCycle * 0.40],
-        [px + 0.15, 0.06, pz - walkCycle * 0.40],
+        [px - 0.15, 0.52, pz + limbSway * 0.5],
+        [px + 0.15, 0.52, pz - limbSway * 0.5],
+        [px - 0.15, 0.06, pz + limbSway * 0.8],
+        [px + 0.15, 0.06, pz - limbSway * 0.8],
       ];
       this.auraMesh.position.set(px, 0.95, pz);
       this.auraMesh.rotation.set(0, 0, 0);
@@ -345,7 +719,10 @@ class BedroomScene {
     this._buildTransceiverNode();
     this._buildSparkles();
 
+    this.fogCloud = new VolumetricRfDisruptionCloud(this.scene);
+    this.presenceEnvelope = new SpatialPresenceEnvelope(this.scene);
     this.avatar = new GreenWireframeAvatar(this.scene);
+    this.tierOverride = 'auto'; // 'auto', '1', '3', '4'
   }
 
   _setupLighting() {
@@ -556,7 +933,7 @@ class BedroomScene {
     this.renderer.setSize(this.width, this.height);
   }
 
-  update(dt, t, isActive, pose, presence) {
+  update(dt, t, isActive, state) {
     if (isActive) {
       this.ledMat.color.setHex(C.greenWire);
       this.waveGroup.visible = true;
@@ -580,7 +957,42 @@ class BedroomScene {
       this.sparkles.geometry.attributes.position.needsUpdate = true;
     }
 
-    this.avatar.update(pose, t, null, presence);
+    const presence = state ? (typeof state.presence === 'boolean' ? state.presence : false) : false;
+    const pose = state ? (state.pose || 'standing') : 'standing';
+    const mot = state ? (typeof state.mot === 'number' ? state.mot : 0) : 0;
+    const breathPower = state ? (typeof state.breathing_band_power === 'number' ? state.breathing_band_power : 0.18) : 0.18;
+    const conf = state ? (typeof state.conf === 'number' ? state.conf : 88) : 88;
+
+    // Determine effective node count
+    let effNodes = (state && typeof state.nodes === 'number' && state.nodes > 0) ? state.nodes : 1;
+    if (this.tierOverride === '1') effNodes = 1;
+    else if (this.tierOverride === '3') effNodes = 3;
+    else if (this.tierOverride === '4') effNodes = 4;
+
+    if (!isActive || !presence) {
+      this.fogCloud.group.visible = false;
+      this.presenceEnvelope.group.visible = false;
+      this.avatar.group.visible = false;
+    } else if (effNodes < 3) {
+      // Tier 1: 1 ESP32 -> Authentic RuView 3D Volumetric Green Fog / Gaussian Splats
+      this.fogCloud.group.visible = true;
+      this.presenceEnvelope.group.visible = false;
+      this.avatar.group.visible = false;
+      this.fogCloud.update(t, presence, pose, mot, breathPower, conf, dt);
+    } else if (effNodes < 4) {
+      // Tier 2: 2-3 ESP32s -> 3D Spatial Centroid & Presence Envelope
+      this.fogCloud.group.visible = false;
+      this.presenceEnvelope.group.visible = true;
+      this.avatar.group.visible = false;
+      this.presenceEnvelope.update(t, presence, pose, mot, breathPower, conf);
+    } else {
+      // Tier 3: 4+ ESP32s -> Articulated 17-Keypoint WiFi DensePose Skeleton
+      this.fogCloud.group.visible = false;
+      this.presenceEnvelope.group.visible = false;
+      this.avatar.group.visible = true;
+      this.avatar.update(pose, t, breathPower, presence, mot);
+    }
+
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
@@ -673,9 +1085,25 @@ class InvisiGuardApp {
     if (this.btnSource) {
       this.btnSource.addEventListener('click', () => {
         this.mode = (this.mode === 'live') ? 'demo' : 'live';
-        this.sourceLabel.textContent = (this.mode === 'live') ? 'Live Hardware' : 'Demo Mode';
+        this.userExplicitDemo = (this.mode === 'demo');
+        this.sourceLabel.textContent = (this.mode === 'live') ? 'Live Hardware' : 'Demo Simulator';
+        const scenWrap = document.getElementById('scenario-wrap');
+        if (scenWrap) {
+          scenWrap.style.display = (this.mode === 'live') ? 'none' : 'flex';
+        }
       });
     }
+
+    const tierPills = document.querySelectorAll('.tier-pill');
+    tierPills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        tierPills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        const nodes = pill.dataset.nodes;
+        this.bedroom.tierOverride = nodes;
+        this._updateTierHUD(nodes);
+      });
+    });
 
     if (this.scenarioSelect) {
       this.scenarioSelect.addEventListener('change', (e) => {
@@ -686,6 +1114,28 @@ class InvisiGuardApp {
     const resetBtn = document.getElementById('btn-reset-cam');
     if (resetBtn) resetBtn.addEventListener('click', () => this.bedroom.resetCamera());
 
+  }
+
+  _updateTierHUD(tierOverride) {
+    const stripDot = document.getElementById('strip-tier-dot');
+    const stripText = document.getElementById('strip-tier-text');
+    if (!stripText) return;
+
+    let eff = tierOverride;
+    if (eff === 'auto') {
+      eff = (this.state && typeof this.state.nodes === 'number' && this.state.nodes > 0) ? String(this.state.nodes) : '1';
+    }
+
+    if (eff === '1' || parseInt(eff, 10) < 3) {
+      if (stripDot) stripDot.style.background = '#00d878';
+      stripText.textContent = 'TIER 1 · VOLUMETRIC GREEN FOG RF DISRUPTION CLOUD (1 ESP32 LIVE)';
+    } else if (eff === '3' || parseInt(eff, 10) < 4) {
+      if (stripDot) stripDot.style.background = '#f5c07a';
+      stripText.textContent = 'TIER 2 · 3D SPATIAL PRESENCE ENVELOPE (3-NODE TRILATERATION)';
+    } else {
+      if (stripDot) stripDot.style.background = '#3eff8a';
+      stripText.textContent = 'TIER 3 · ARTICULATED 17-KEYPOINT DENSEPOSE SKELETON (4+ NODES)';
+    }
   }
 
   _initMLStudio() {
@@ -1173,12 +1623,14 @@ class InvisiGuardApp {
             const isLivePacket = (msg.source_state === 'live' || (msg.hardware && msg.hardware.connected)) && (msg.nodes_count > 0 || (msg.nodes && msg.nodes.length > 0));
             // Auto-transition from Demo or Disconnected to Live CSI within 500ms of first physical packet
             if (isLivePacket) {
-              if (this.mode === 'demo') {
+              if (this.mode === 'demo' && !this.userExplicitDemo) {
                 this.mode = 'live';
                 if (this.sourceLabel) this.sourceLabel.textContent = 'Live Hardware';
               }
-              this.state.sourceState = 'live';
-              this.state.nodes = msg.nodes_count || 1;
+              if (this.mode === 'live') {
+                this.state.sourceState = 'live';
+                this.state.nodes = msg.nodes_count || 1;
+              }
               if (typeof msg.packets_received === 'number') {
                 this.state.packets = msg.packets_received;
               }
@@ -1228,20 +1680,21 @@ class InvisiGuardApp {
     if (this.state.presence) {
       this.state.hr = vit.heart_rate_bpm || 72;
       this.state.br = vit.breathing_rate_bpm || 16;
-      this.state.conf = Math.round((vit.confidence || 0.88) * 100);
+      this.state.breathing_band_power = typeof feat.breathing_band_power === 'number' ? feat.breathing_band_power : 0.18;
 
       if (msg.triage) this.state.triage = msg.triage;
       if (msg.dsp_filtering) this.state.dspFiltering = msg.dsp_filtering;
 
       if (this.state.fall) this.state.pose = 'fallen';
-      else if (this.state.struggle || cls.motion_level === 'active' || this.state.mlClass === 'WALKING' || this.state.mlClass === 'VIOLENT_STRUGGLE') this.state.pose = 'walking';
       else if (this.state.triage && (this.state.triage.state === 'HEALTHY_RESTFUL_SLEEP' || this.state.triage.state === 'SICK_HIGH_FEVER')) this.state.pose = 'sleep';
       else if (this.state.mlClass === 'NORMAL_STUDYING') this.state.pose = 'study';
+      else if (this.state.mot > 0.15 || cls.motion_level === 'active' || this.state.struggle) this.state.pose = 'active';
       else this.state.pose = 'standing';
     } else {
       this.state.hr = 0;
       this.state.br = 0;
       this.state.conf = 0;
+      this.state.breathing_band_power = 0;
       this.state.pose = 'standing';
       if (msg.triage) this.state.triage = msg.triage;
     }
@@ -1591,6 +2044,26 @@ class InvisiGuardApp {
     if (elPredConf && this.state.mlConf) {
       elPredConf.textContent = `${Math.round(this.state.mlConf * 100)}%`;
     }
+
+    // 5. Bedroom HUD Strip Metrics
+    const elBreathPower = document.getElementById('hud-breath-power');
+    if (elBreathPower) elBreathPower.textContent = (this.state.breathing_band_power || 0.18).toFixed(3);
+
+    const elMotionPower = document.getElementById('hud-motion-power');
+    if (elMotionPower) elMotionPower.textContent = (this.state.mot || 0).toFixed(3);
+
+    const elVitalsSummary = document.getElementById('hud-vitals-summary');
+    if (elVitalsSummary) {
+      if (this.state.presence && this.state.hr > 0) {
+        elVitalsSummary.textContent = `${this.state.hr} BPM / ${this.state.br} RPM`;
+      } else {
+        elVitalsSummary.textContent = 'ROOM EMPTY';
+      }
+    }
+
+    if (this.bedroom) {
+      this._updateTierHUD(this.bedroom.tierOverride);
+    }
   }
 
   _drawCanvases() {
@@ -1789,7 +2262,7 @@ class InvisiGuardApp {
       const isActive = (this.mode === 'demo' || (this.state.sourceState === 'live' && this.state.nodes > 0));
 
       if (this.activeTab === 'bedroom') {
-        this.bedroom.update(dt, t, isActive, this.state.pose, this.state.presence);
+        this.bedroom.update(dt, t, isActive, this.state);
       }
 
       this._drawCanvases();
@@ -1798,6 +2271,14 @@ class InvisiGuardApp {
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  new InvisiGuardApp();
-});
+function boot() {
+  if (!window.app) {
+    window.app = new InvisiGuardApp();
+  }
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}

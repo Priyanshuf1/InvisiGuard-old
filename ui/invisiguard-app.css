@@ -366,6 +366,37 @@ body {
   cursor: pointer;
 }
 
+.tier-pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tier-pill {
+  padding: 3px 9px;
+  border-radius: 12px;
+  border: 1px solid var(--bg-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tier-pill:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--terra-pale);
+}
+
+.tier-pill.active {
+  background: rgba(0, 216, 120, 0.16);
+  border-color: #00d878;
+  color: #3eff8a;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(0, 216, 120, 0.2);
+}
+
 .bedroom-actions {
   pointer-events: auto;
   display: flex;
