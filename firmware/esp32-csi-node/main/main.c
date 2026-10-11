@@ -256,8 +256,17 @@ static void wifi_init_sta(void)
         ESP_LOGI(TAG, "Connected to WiFi");
     } else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGW(TAG, "Not connected after %d attempts -- continuing boot; "
-                      "reconnection keeps retrying in the background",
+                      "locking radio for standalone CSI sniffer",
                  WIFI_BOOT_WAIT_ATTEMPTS);
+        if (s_reconnect_timer != NULL) {
+            esp_timer_stop(s_reconnect_timer);
+        }
+        esp_wifi_disconnect();
+        uint8_t csi_ch = g_nvs_config.csi_channel > 0 ? g_nvs_config.csi_channel : (uint8_t)CONFIG_CSI_WIFI_CHANNEL;
+        esp_wifi_set_promiscuous(true);
+        esp_wifi_set_channel(csi_ch, WIFI_SECOND_CHAN_NONE);
+        csi_collector_enable_data_capture();
+        ESP_LOGI(TAG, "Standalone promiscuous CSI capture active on channel %u", (unsigned)csi_ch);
     }
 }
 

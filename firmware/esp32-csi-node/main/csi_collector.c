@@ -376,6 +376,9 @@ static void wifi_csi_callback(void *ctx, wifi_csi_info_t *info)
                     ESP_LOGW(TAG, "sendto failed (fail #%lu)", (unsigned long)s_send_fail);
                 }
             }
+            /* Direct USB UART stream for PC host (e.g. COM7) */
+            fwrite(frame_buf, 1, frame_len, stdout);
+            fflush(stdout);
         } else {
             s_rate_skip++;
         }
@@ -615,6 +618,14 @@ void csi_collector_init(void)
     /* Update the hop table's first channel to match. */
     s_hop_channels[0] = csi_channel;
 
+    /* Explicitly tune radio to the CSI channel for promiscuous capture */
+    esp_err_t ch_err = esp_wifi_set_channel(csi_channel, WIFI_SECOND_CHAN_NONE);
+    if (ch_err == ESP_OK) {
+        ESP_LOGI(TAG, "Radio locked to CSI channel %u (promiscuous capture active)", (unsigned)csi_channel);
+    } else {
+        ESP_LOGW(TAG, "esp_wifi_set_channel(%u) failed: %s", (unsigned)csi_channel, esp_err_to_name(ch_err));
+    }
+
     /* Disable WiFi modem sleep — reliable CSI capture needs the radio awake.
      * The ESP-IDF STA default is WIFI_PS_MIN_MODEM, which lets the modem
      * sleep between DTIM beacons; with the MGMT-only promiscuous filter
@@ -845,6 +856,21 @@ void csi_collector_enable_data_capture(void)
     } else {
         ESP_LOGW(TAG, "Failed to enable DATA-frame CSI capture: %s", esp_err_to_name(err));
     }
+}
+
+esp_err_t csi_collector_set_channel(uint8_t channel)
+{
+    if (channel < 1 || channel > 14) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    s_hop_channels[0] = channel;
+    esp_err_t err = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Radio explicitly set to channel %u", (unsigned)channel);
+    } else {
+        ESP_LOGW(TAG, "Failed to set radio channel %u: %s", (unsigned)channel, esp_err_to_name(err));
+    }
+    return err;
 }
 
 void csi_collector_start_hop_timer(void)

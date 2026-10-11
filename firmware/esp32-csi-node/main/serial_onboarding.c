@@ -14,6 +14,9 @@
 #include "esp_mac.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "esp_wifi.h"
+#include "csi_collector.h"
+#include <stdlib.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs.h"
@@ -97,6 +100,34 @@ static esp_err_t commit_config(const ruview_onboarding_config_t *config)
 
 static void process_line(char *line)
 {
+    if (strncmp(line, "channel ", 8) == 0) {
+        int ch = atoi(line + 8);
+        if (ch >= 1 && ch <= 14) {
+            esp_wifi_disconnect();
+            csi_collector_set_channel((uint8_t)ch);
+            printf("CHANNEL_OK channel=%d\n", ch);
+            fflush(stdout);
+            return;
+        }
+    }
+    if (strcmp(line, "csi enable") == 0 || strcmp(line, "csi_enable") == 0) {
+        csi_collector_enable_data_capture();
+        esp_wifi_set_promiscuous(true);
+        printf("CSI_ENABLED\n");
+        fflush(stdout);
+        return;
+    }
+    if (strcmp(line, "standalone") == 0 || strcmp(line, "sniff") == 0) {
+        esp_wifi_disconnect();
+        csi_collector_enable_data_capture();
+        esp_wifi_set_promiscuous(true);
+        uint8_t ch = s_current_config.csi_channel > 0 ? s_current_config.csi_channel : 1;
+        csi_collector_set_channel(ch);
+        printf("STANDALONE_SNIFFER_OK channel=%u\n", (unsigned)ch);
+        fflush(stdout);
+        return;
+    }
+
     char nonce[RUVIEW_ONBOARDING_NONCE_HEX_LEN + 1] = {0};
     if (ruview_onboarding_parse_hello(line, nonce)) {
         memcpy(s_issued_nonce, nonce, sizeof(s_issued_nonce));

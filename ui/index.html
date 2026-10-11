@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InvisiGuard — WiFi CSI Sensing & Safety Platform</title>
-  <link rel="stylesheet" href="invisiguard-app.css">
+  <link rel="stylesheet" href="invisiguard-app.css?v=20261011_v5">
   <link rel="icon" href="favicon.ico">
   <script>
     if ('serviceWorker' in navigator) {
@@ -33,7 +33,8 @@
 
       <div class="header-actions">
         <a href="/legacy-dashboard.html" class="btn-toggle-source" style="text-decoration: none; color: inherit; display: inline-flex; align-items: center; gap: 6px;" title="Switch to Legacy Technical Dashboard">
-          ⮌ <span style="font-weight:600">Technical Dashboard</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+          <span style="font-weight:600">Technical Dashboard</span>
         </a>
 
         <div class="status-badge">
@@ -42,7 +43,8 @@
         </div>
 
         <button class="btn-toggle-source" id="btn-toggle-source" title="Toggle Hardware vs Demo Simulator">
-          ⚡ <span id="source-label">Live Hardware</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span id="source-label">Live Hardware</span>
         </button>
       </div>
     </div>
@@ -50,22 +52,22 @@
     <!-- Navigation Tabs (Separate Clean Sections like RuView) -->
     <nav class="tabs-nav" role="tablist">
       <button class="tab-btn active" data-tab="bedroom">
-        <span class="tab-icon">&#9635;</span> 3D Bedroom Sensing
+        <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span> 3D Bedroom Sensing
       </button>
       <button class="tab-btn" data-tab="vitals">
-        <span class="tab-icon">&#9825;</span> Vital Signs
+        <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span> Vital Signs
       </button>
       <button class="tab-btn" data-tab="hardware">
-        <span class="tab-icon">&#128246;</span> Hardware &amp; RF
+        <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg></span> Hardware &amp; RF
       </button>
       <button class="tab-btn" data-tab="safety">
-        <span class="tab-icon">&#9889;</span> Safety &amp; Falls
+        <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> Safety &amp; Falls
       </button>
       <button class="tab-btn" data-tab="ml">
-        <span class="tab-icon">&#129504;</span> ML Training Studio
+        <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12z"/></svg></span> ML Training Studio
       </button>
       <button class="tab-btn" data-tab="architecture">
-        <span class="tab-icon">&#8505;</span> CSI Architecture
+        <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span> CSI Architecture
       </button>
     </nav>
   </header>
@@ -79,20 +81,18 @@
     <section class="section-pane active" id="pane-bedroom">
       <canvas id="scene-canvas"></canvas>
 
-      <!-- Overlay Controls -->
+      <!-- Overlay Controls — Spline Floating Glass Islands -->
       <div class="bedroom-overlay">
-        <div class="bedroom-controls">
-          <div class="tier-pill-group" id="tier-pill-group">
-            <span class="ctrl-label" style="font-size:11px; color:var(--text-label); font-weight:600; margin-right:4px;">RF TIER:</span>
-            <button type="button" class="tier-pill active" data-nodes="auto" id="tier-pill-auto" title="Auto-detect from hardware (1 Live ESP32)">Auto (Live)</button>
-            <button type="button" class="tier-pill" data-nodes="1" id="tier-pill-1" title="1 ESP32: Volumetric Green Fog RF Disruption Cloud">1 Node Fog</button>
-            <button type="button" class="tier-pill" data-nodes="3" id="tier-pill-3" title="3 ESP32s: 3D Spatial Presence Envelope">3 Nodes Envelope</button>
-            <button type="button" class="tier-pill" data-nodes="4" id="tier-pill-4" title="4+ ESP32s: 17-Keypoint WiFi DensePose Skeleton">4+ Nodes Skeleton</button>
+        <!-- Island 1: Left Telemetry & Scenario Selector -->
+        <div class="hud-island hud-island-left">
+          <div class="ruview-auto-badge" id="ruview-auto-badge">
+            <span class="hud-live-beacon"></span>
+            <span id="ruview-auto-mode-label">RUVIEW VOLUMETRIC RF FIELD · AUTO ADAPTIVE</span>
           </div>
 
-          <div class="scenario-wrap" id="scenario-wrap" style="display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--bg-border); padding-left: 10px;">
-            <span style="font-size:11px; color:var(--text-label); font-weight:600;">Scenario:</span>
-            <select id="scenario-select">
+          <div class="scenario-wrap" id="scenario-wrap">
+            <span class="scenario-label">Scenario:</span>
+            <select id="scenario-select" class="hud-select">
               <option value="auto">Live Telemetry (Auto)</option>
               <option value="sleep">Sleep Monitor (Bed)</option>
               <option value="fever">Sick Student (Fever / High RR)</option>
@@ -105,8 +105,75 @@
           </div>
         </div>
 
-        <div class="bedroom-actions">
-          <button class="icon-btn" id="btn-reset-cam" title="Reset Camera View">&#x21bb;</button>
+        <!-- Island 2: Center Camera Director Pills (Theatre.js) -->
+        <div class="hud-island hud-island-center">
+          <div class="cam-director-pills" id="cam-director-pills" title="Theatre.js Camera Authoring Director Views">
+            <button type="button" class="cam-preset-btn active" data-cam="overview" title="Studio Isometric Angle">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              <span>Studio</span>
+            </button>
+            <button type="button" class="cam-preset-btn" data-cam="bed" title="Macro Sleep & Vitals Focus">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/></svg>
+              <span>Sleep</span>
+            </button>
+            <button type="button" class="cam-preset-btn" data-cam="desk" title="Study Desk Posture & Micro-Doppler">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              <span>Study</span>
+            </button>
+            <button type="button" class="cam-preset-btn" data-cam="radar" title="Top-Down Planar Fresnel Radar Projection">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+              <span>Radar 2D</span>
+            </button>
+            <button type="button" class="cam-preset-btn tour-btn" id="btn-camera-tour" title="Play Autonomous Cinematic Camera Flight Tour">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span id="label-cam-tour">Tour</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Island 3: Right Live Vitals Pill & Camera Reset -->
+        <div class="hud-island hud-island-right">
+          <div class="bedroom-vitals-pill" id="bedroom-vitals-pill" title="Live Continuous Biometrics from WiFi Doppler Phase">
+            <span class="vitals-live-dot">●</span>
+            <span class="vitals-live-label" style="display:inline-flex; align-items:center; gap:4px;">
+              <span id="live-cardiac-icon" style="display:inline-flex; align-items:center; transition: transform 0.1s ease; color:#ff4060;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="#ff4060"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </span>
+              <strong id="pill-hr">72</strong> BPM
+            </span>
+            <span class="vitals-live-sep" style="opacity:0.35; margin:0 4px;">|</span>
+            <span class="vitals-live-label" style="display:inline-flex; align-items:center; gap:4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 4v8m0 0l-3 4m3-4l3 4"/><circle cx="6" cy="15" r="3"/><circle cx="18" cy="15" r="3"/></svg>
+              <strong id="pill-br">15.6</strong> RPM
+            </span>
+          </div>
+          <button class="icon-btn" id="btn-reset-cam" title="Reset Camera View (Studio Isometric)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Theatre.js Cinematic Timeline Scrubber HUD -->
+      <div class="theatre-scrubber-hud" id="theatre-scrubber-hud">
+        <button type="button" class="scrub-play-btn" id="btn-scrub-play" title="Play / Pause Cinematic Camera Flight Sequence">
+          <svg id="icon-scrub-play" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <svg id="icon-scrub-pause" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        </button>
+
+        <div class="scrub-track-wrap">
+          <div class="scrub-keyframes-guide">
+            <span class="kf-marker" style="left: 0%;" title="0.0s: Studio Overview">◆ Studio</span>
+            <span class="kf-marker" style="left: 25%;" title="3.0s: Bed Vitals">◆ Bed</span>
+            <span class="kf-marker" style="left: 50%;" title="6.0s: Study Desk">◆ Desk</span>
+            <span class="kf-marker" style="left: 75%;" title="9.0s: Overhead Radar">◆ Radar</span>
+          </div>
+          <input type="range" class="theatre-slider" id="cam-timeline-scrubber" min="0" max="12" step="0.05" value="0">
+        </div>
+
+        <div class="scrub-info-wrap">
+          <span class="scrub-timecode" id="scrub-timecode">00:00.0 / 12.0s</span>
+          <span class="scrub-sep">·</span>
+          <span class="scrub-view-label" id="scrub-view-desc">Studio Overview</span>
         </div>
       </div>
 
@@ -125,7 +192,20 @@
         </div>
         <div class="strip-divider"></div>
         <div class="strip-item">
-          <span>Vitals: <strong id="hud-vitals-summary" style="color:var(--green-bright);">72 BPM / 16 RPM</strong></span>
+          <span>Vitals: <strong id="hud-vitals-summary" style="color:var(--green-bright); display: inline-flex; align-items: center; gap: 4px;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="#ff4060"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span>72 BPM</span> &middot; 
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 4v8m0 0l-3 4m3-4l3 4"/><circle cx="6" cy="15" r="3"/><circle cx="18" cy="15" r="3"/></svg>
+            <span>15.6 RPM</span>
+          </strong></span>
+        </div>
+        <div class="strip-divider"></div>
+        <div class="strip-item" id="strip-fan-status">
+          <span style="color: var(--terra-sun); display: inline-flex; align-items: center; gap: 4px;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Fan Notch:</span>
+            <strong id="hud-fan-text" style="color: var(--green-bright);">-45.2 dB Active</strong>
+          </span>
         </div>
         <div class="strip-divider"></div>
         <div class="strip-item" style="color: var(--text-dim); font-size: 11px;">Orbit: Drag &middot; Zoom: Scroll</div>
@@ -292,14 +372,14 @@
           <div class="ui-card">
             <div class="card-header">
               <span class="card-title">Radio Signal Metrics</span>
-              <span class="card-badge">Channel 6</span>
+              <span class="card-badge" id="hw-channel-badge">Channel 13</span>
             </div>
             <table class="data-table">
               <tr><td>Mean RSSI</td><td id="hw-rssi">-- dBm</td></tr>
-              <tr><td>Noise Floor</td><td>-95.0 dBm</td></tr>
+              <tr><td>Noise Floor</td><td id="hw-noise">-95.0 dBm</td></tr>
               <tr><td>Doppler Variance</td><td id="hw-var">--</td></tr>
               <tr><td>Motion Band Power</td><td id="hw-mot">--</td></tr>
-              <tr><td>RF Center Frequency</td><td>2437 MHz (2.4 GHz)</td></tr>
+              <tr><td>RF Center Frequency</td><td id="hw-rf-freq">2472 MHz (2.4 GHz)</td></tr>
             </table>
           </div>
         </div>
@@ -388,12 +468,16 @@
         <!-- Real-Time Recording Banner -->
         <div id="ml-record-banner" class="ui-card" style="margin-bottom: 20px; display: none; background: rgba(255, 64, 96, 0.08); border-color: rgba(255, 64, 96, 0.4);">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 14px;">
               <span class="rec-pulsing-badge">● RECORDING IN PROGRESS</span>
               <span style="font-size: 13px; font-weight: 600; color: #fff;">Class: <span id="banner-rec-class">EMPTY_ROOM</span></span>
               <span style="font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">Frames: <strong id="banner-rec-frames" style="color: var(--terra-pale);">0</strong></span>
+              <span style="font-size: 12px; color: #38bdf8; font-family: 'JetBrains Mono', monospace;">Duration: <strong id="banner-rec-timer">00:00</strong></span>
             </div>
-            <button id="btn-banner-stop" class="btn-danger" style="padding: 6px 16px;">■ Stop Recording &amp; Save</button>
+            <button id="btn-banner-stop" class="btn-danger" style="padding: 7px 16px; font-size: 11px;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+              <span>Stop Recording &amp; Save</span>
+            </button>
           </div>
         </div>
 
@@ -403,18 +487,32 @@
           <div class="class-rec-card" style="border-color: rgba(245, 192, 122, 0.4);">
             <div>
               <div class="class-card-top">
-                <span class="class-card-title">🚪 0: Empty Bedroom</span>
+                <span class="class-card-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M14 11h.01"/></svg>
+                  0: Empty Bedroom
+                </span>
                 <span class="class-card-count" id="count-class-0">--</span>
               </div>
               <div class="class-card-desc">Zero-motion multipath reference. Filters stationary furniture and wall reflections.</div>
             </div>
             <div>
               <button class="btn-rec-calib btn-open-prep" data-class="0" data-name="EMPTY_ROOM" data-sec="20" style="margin-bottom: 8px;" title="20s prep to exit bedroom and close door">
-                ⏳ 20s Prep &amp; Calib (Exit Room)
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>20s Prep &amp; Calib (Exit Room)</span>
               </button>
               <div class="class-card-btns">
-                <button class="btn-rec-start" data-class="0" data-name="EMPTY_ROOM">▶ Start</button>
-                <button class="btn-rec-stop" data-class="0" disabled>■ Stop</button>
+                <button class="btn-rec-start" data-class="0" data-name="EMPTY_ROOM">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>Start</span>
+                </button>
+                <button class="btn-rec-stop" data-class="0" disabled>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+                  <span>Stop</span>
+                </button>
+                <button class="btn-rec-delete" data-class="0" data-name="EMPTY_ROOM" title="Delete recorded frames for Empty Bedroom">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <span>Clear</span>
+                </button>
               </div>
             </div>
           </div>
@@ -423,18 +521,32 @@
           <div class="class-rec-card">
             <div>
               <div class="class-card-top">
-                <span class="class-card-title">📖 1: Desk Study</span>
+                <span class="class-card-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                  1: Desk Study
+                </span>
                 <span class="class-card-count" id="count-class-1">--</span>
               </div>
               <div class="class-card-desc">Seated student typing, reading, and gentle breathing micro-movements.</div>
             </div>
             <div>
               <button class="btn-rec-calib btn-open-prep" data-class="1" data-name="NORMAL_STUDYING" data-sec="10" style="margin-bottom: 8px;" title="10s prep to walk over and sit comfortably at desk">
-                ⏳ 10s Prep &amp; Record (Sit at Desk)
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>10s Prep &amp; Record (Sit at Desk)</span>
               </button>
               <div class="class-card-btns">
-                <button class="btn-rec-start" data-class="1" data-name="NORMAL_STUDYING">▶ Start</button>
-                <button class="btn-rec-stop" data-class="1" disabled>■ Stop</button>
+                <button class="btn-rec-start" data-class="1" data-name="NORMAL_STUDYING">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>Start</span>
+                </button>
+                <button class="btn-rec-stop" data-class="1" disabled>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+                  <span>Stop</span>
+                </button>
+                <button class="btn-rec-delete" data-class="1" data-name="NORMAL_STUDYING" title="Delete recorded frames for Desk Study / Sitting">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <span>Clear</span>
+                </button>
               </div>
             </div>
           </div>
@@ -443,18 +555,32 @@
           <div class="class-rec-card">
             <div>
               <div class="class-card-top">
-                <span class="class-card-title">🚶 2: Room Pacing</span>
+                <span class="class-card-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><path d="M10 22l2-7 3 3v4M8 15l2-4 3-1 3 3"/></svg>
+                  2: Room Pacing
+                </span>
                 <span class="class-card-count" id="count-class-2">--</span>
               </div>
               <div class="class-card-desc">Continuous bipedal movement across the bedroom floor plane.</div>
             </div>
             <div>
               <button class="btn-rec-calib btn-open-prep" data-class="2" data-name="WALKING" data-sec="10" style="margin-bottom: 8px;" title="10s prep to get into starting corner position">
-                ⏳ 10s Prep &amp; Record (Walk to Corner)
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>10s Prep &amp; Record (Walk to Corner)</span>
               </button>
               <div class="class-card-btns">
-                <button class="btn-rec-start" data-class="2" data-name="WALKING">▶ Start</button>
-                <button class="btn-rec-stop" data-class="2" disabled>■ Stop</button>
+                <button class="btn-rec-start" data-class="2" data-name="WALKING">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>Start</span>
+                </button>
+                <button class="btn-rec-stop" data-class="2" disabled>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+                  <span>Stop</span>
+                </button>
+                <button class="btn-rec-delete" data-class="2" data-name="WALKING" title="Delete recorded frames for Room Pacing / Walking">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <span>Clear</span>
+                </button>
               </div>
             </div>
           </div>
@@ -463,18 +589,32 @@
           <div class="class-rec-card">
             <div>
               <div class="class-card-top">
-                <span class="class-card-title">⚡ 3: Struggle / Ragging</span>
+                <span class="class-card-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  3: Struggle / Ragging
+                </span>
                 <span class="class-card-count" id="count-class-3">--</span>
               </div>
               <div class="class-card-desc">Fast multi-limb struggle, sudden directional changes, and high-frequency Doppler spikes.</div>
             </div>
             <div>
               <button class="btn-rec-calib btn-open-prep" data-class="3" data-name="VIOLENT_STRUGGLE" data-sec="10" style="margin-bottom: 8px;" title="10s prep to ready simulation stance with partner">
-                ⏳ 10s Prep &amp; Record (Ready Stance)
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>10s Prep &amp; Record (Ready Stance)</span>
               </button>
               <div class="class-card-btns">
-                <button class="btn-rec-start" data-class="3" data-name="VIOLENT_STRUGGLE">▶ Start</button>
-                <button class="btn-rec-stop" data-class="3" disabled>■ Stop</button>
+                <button class="btn-rec-start" data-class="3" data-name="VIOLENT_STRUGGLE">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>Start</span>
+                </button>
+                <button class="btn-rec-stop" data-class="3" disabled>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+                  <span>Stop</span>
+                </button>
+                <button class="btn-rec-delete" data-class="3" data-name="VIOLENT_STRUGGLE" title="Delete recorded frames for Struggle / Ragging">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <span>Clear</span>
+                </button>
               </div>
             </div>
           </div>
@@ -483,18 +623,32 @@
           <div class="class-rec-card">
             <div>
               <div class="class-card-top">
-                <span class="class-card-title">🚨 4: Sudden Fall</span>
+                <span class="class-card-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  4: Sudden Fall
+                </span>
                 <span class="class-card-count" id="count-class-4">--</span>
               </div>
               <div class="class-card-desc">Vertical velocity drop followed by floor stillness and micro-breathing.</div>
             </div>
             <div>
               <button class="btn-rec-calib btn-open-prep" data-class="4" data-name="FALL_EVENT" data-sec="10" style="margin-bottom: 8px;" title="10s prep to position safely on mat before fall">
-                ⏳ 10s Prep &amp; Record (Stand on Mat)
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>10s Prep &amp; Record (Stand on Mat)</span>
               </button>
               <div class="class-card-btns">
-                <button class="btn-rec-start" data-class="4" data-name="FALL_EVENT">▶ Start</button>
-                <button class="btn-rec-stop" data-class="4" disabled>■ Stop</button>
+                <button class="btn-rec-start" data-class="4" data-name="FALL_EVENT">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>Start</span>
+                </button>
+                <button class="btn-rec-stop" data-class="4" disabled>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+                  <span>Stop</span>
+                </button>
+                <button class="btn-rec-delete" data-class="4" data-name="FALL_EVENT" title="Delete recorded frames for Sudden Fall">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <span>Clear</span>
+                </button>
               </div>
             </div>
           </div>
@@ -521,6 +675,59 @@
           </div>
         </div>
 
+        <!-- Selective Dataset Management & Pruning Controls -->
+        <div class="ui-card" style="margin-bottom: 24px;">
+          <div class="card-header">
+            <span class="card-title" style="display: flex; align-items: center; gap: 8px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Selective Dataset Pruning &amp; Session Management
+            </span>
+            <span class="card-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.3);">Precision Data Filtering</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+            Filter and selectively delete training samples by date, session, or specific class without losing or corrupting the rest of your dataset.
+          </p>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px;">
+            <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 140px;">
+              <label style="font-size: 10px; text-transform: uppercase; color: var(--text-label); font-weight: 600;">Filter by Date</label>
+              <select id="select-prune-date" class="ui-select" style="background: rgba(0,0,0,0.5); border: 1px solid var(--bg-border); color: #fff; border-radius: 6px; padding: 7px 10px; font-size: 12px;">
+                <option value="all">All Dates / All Days</option>
+                <option value="today">Today's Sessions</option>
+              </select>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 160px;">
+              <label style="font-size: 10px; text-transform: uppercase; color: var(--text-label); font-weight: 600;">Filter by Behavior Class</label>
+              <select id="select-prune-class" class="ui-select" style="background: rgba(0,0,0,0.5); border: 1px solid var(--bg-border); color: #fff; border-radius: 6px; padding: 7px 10px; font-size: 12px;">
+                <option value="all">All 5 Classes</option>
+                <option value="0">0: Empty Bedroom</option>
+                <option value="1">1: Desk Study / Sitting</option>
+                <option value="2">2: Room Pacing / Walking</option>
+                <option value="3">3: Struggle / Ragging</option>
+                <option value="4">4: Sudden Fall</option>
+              </select>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button id="btn-prune-selected" class="btn-danger" style="padding: 7px 14px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                <span>Delete Filtered Data</span>
+              </button>
+              <button id="btn-undo-session" class="btn-secondary" style="padding: 7px 14px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;" title="Discard only the most recent recording session">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                <span>Undo Last Session</span>
+              </button>
+              <button id="btn-restore-backup" class="btn-secondary" style="padding: 7px 14px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; border-color: rgba(0, 216, 120, 0.4); color: var(--green-bright);" title="Restore dataset from the latest automatic safety backup">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                <span>Restore Backup</span>
+              </button>
+              <button id="btn-refresh-dataset" class="btn-secondary" style="padding: 7px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px;" title="Refresh dataset statistics">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+          <div id="prune-status-msg" style="font-size: 11px; color: var(--terra-pale); min-height: 16px;"></div>
+        </div>
+
         <!-- Model Training & Live Pipeline Grid -->
         <div class="card-grid-2">
           <!-- Daily Training Engine -->
@@ -533,8 +740,9 @@
               Train the 10-feature scikit-learn classifier with cooler motor noise rejection directly on your local sensing backend.
             </p>
             <div style="display: flex; gap: 10px; margin-bottom: 16px;">
-              <button id="btn-start-train" class="btn-primary" style="flex: 1;">
-                ⚡ Train Production Model (Daily Calibration)
+              <button id="btn-start-train" class="btn-primary" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <span>Train Production Model (Daily Calibration)</span>
               </button>
             </div>
             <div class="terminal-log" id="train-terminal-log">
@@ -643,14 +851,27 @@
         <div class="rec-pulsing-badge" id="calib-rec-badge">● RECORDING ZERO-MOTION BASELINE</div>
         <div class="rec-metric-row">
           <span>Frames Captured: <strong id="modal-rec-samples" style="color: var(--terra-sun);">0</strong></span> &middot;
+          <span>Elapsed: <strong id="modal-rec-timer" style="color: #38bdf8;">00:00</strong></span> &middot;
           <span>Multipath Var: <strong id="modal-rec-var" style="color: var(--green-bright);">0.18</strong></span>
+        </div>
+        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 8px;">
+          Recording continuously until you click &quot;Stop &amp; Save Data&quot;. The last 10s of movement noise will be automatically pruned.
         </div>
       </div>
 
       <div class="modal-actions">
-        <button id="btn-skip-countdown" class="btn-primary">⚡ Start Recording Now</button>
-        <button id="btn-stop-calibration" class="btn-danger" style="display: none;">■ Stop &amp; Save Data</button>
-        <button id="btn-cancel-calibration" class="btn-secondary">✕ Cancel</button>
+        <button id="btn-skip-countdown" class="btn-primary">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Start Recording Now</span>
+        </button>
+        <button id="btn-stop-calibration" class="btn-danger" style="display: none;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+          <span>Stop &amp; Save Data</span>
+        </button>
+        <button id="btn-cancel-calibration" class="btn-secondary">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <span>Cancel</span>
+        </button>
       </div>
     </div>
   </div>
@@ -666,6 +887,6 @@
   </script>
 
   <!-- Application Controller -->
-  <script type="module" src="invisiguard-app.js?v=20261011_v1"></script>
+  <script type="module" src="invisiguard-app.js?v=20261011_v5"></script>
 </body>
 </html>

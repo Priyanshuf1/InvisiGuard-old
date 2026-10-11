@@ -33,7 +33,7 @@ NVS_PARTITION_SIZE = 0x6000  # 24 KiB
 def build_nvs_csv(ssid, password, target_ip, target_port, node_id,
                    edge_tier=None, pres_thresh=None, fall_thresh=None,
                    vital_window=None, vital_interval_ms=None, subk_count=None,
-                   wasm_verify=None, wasm_pubkey=None):
+                   wasm_verify=None, wasm_pubkey=None, channel=None):
     """Build an NVS CSV string for the csi_cfg namespace."""
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -49,6 +49,10 @@ def build_nvs_csv(ssid, password, target_ip, target_port, node_id,
         writer.writerow(["target_port", "data", "u16", str(target_port)])
     if node_id is not None:
         writer.writerow(["node_id", "data", "u8", str(node_id)])
+    if channel is not None:
+        writer.writerow(["csi_channel", "data", "u8", str(channel)])
+        writer.writerow(["hop_count", "data", "u8", "1"])
+        writer.writerow(["chan_list", "data", "u8", str(channel)])
     # ADR-039: Edge intelligence configuration.
     if edge_tier is not None:
         writer.writerow(["edge_tier", "data", "u8", str(edge_tier)])
@@ -82,20 +86,38 @@ def generate_nvs_binary(csv_content, size):
     try:
         # Try the pip-installed version first (esp_idf_nvs_partition_gen package)
         try:
+            import types
             from esp_idf_nvs_partition_gen import nvs_partition_gen
-            nvs_partition_gen.generate(csv_path, bin_path, size)
-            with open(bin_path, "rb") as f:
-                return f.read()
-        except ImportError:
+            gen_args = types.SimpleNamespace(
+                input=csv_path,
+                output=bin_path,
+                size=hex(size),
+                version=2,
+                outdir=os.path.dirname(bin_path) or ".",
+            )
+            nvs_partition_gen.generate(gen_args)
+            if os.path.isfile(bin_path):
+                with open(bin_path, "rb") as f:
+                    return f.read()
+        except Exception as e:
             pass
 
         # Try legacy import name (older versions)
         try:
+            import types
             import nvs_partition_gen
-            nvs_partition_gen.generate(csv_path, bin_path, size)
-            with open(bin_path, "rb") as f:
-                return f.read()
-        except ImportError:
+            gen_args = types.SimpleNamespace(
+                input=csv_path,
+                output=bin_path,
+                size=hex(size),
+                version=2,
+                outdir=os.path.dirname(bin_path) or ".",
+            )
+            nvs_partition_gen.generate(gen_args)
+            if os.path.isfile(bin_path):
+                with open(bin_path, "rb") as f:
+                    return f.read()
+        except Exception:
             pass
 
         # Fall back to calling the ESP-IDF script directly
@@ -160,6 +182,7 @@ def main():
     parser.add_argument("--target-ip", help="Aggregator host IP (e.g. 192.168.1.20)")
     parser.add_argument("--target-port", type=int, help="Aggregator UDP port (default: 5005)")
     parser.add_argument("--node-id", type=int, help="Node ID 0-255 (default: 1)")
+    parser.add_argument("--channel", type=int, help="WiFi CSI Channel 1-14 (default: auto or AP channel)")
     # ADR-039: Edge intelligence configuration.
     parser.add_argument("--edge-tier", type=int, choices=[0, 1, 2],
                         help="Edge processing tier: 0=raw, 1=basic, 2=full")
@@ -200,7 +223,7 @@ def main():
         wasm_pubkey_val = pk.lower()
 
     if not any([args.ssid, args.password is not None, args.target_ip,
-                args.target_port, args.node_id is not None,
+                args.target_port, args.node_id is not None, args.channel is not None,
                 args.edge_tier is not None, args.pres_thresh is not None,
                 args.fall_thresh is not None, args.vital_window is not None,
                 args.vital_interval is not None, args.subk_count is not None,
@@ -222,6 +245,8 @@ def main():
         print(f"  Target Port:   {args.target_port}")
     if args.node_id is not None:
         print(f"  Node ID:       {args.node_id}")
+    if args.channel is not None:
+        print(f"  CSI Channel:   {args.channel}")
     if args.edge_tier is not None:
         print(f"  Edge Tier:     {args.edge_tier}")
     if args.pres_thresh is not None:
@@ -245,6 +270,7 @@ def main():
         fall_thresh=args.fall_thresh, vital_window=args.vital_window,
         vital_interval_ms=args.vital_interval, subk_count=args.subk_count,
         wasm_verify=wasm_verify_val, wasm_pubkey=wasm_pubkey_val,
+        channel=args.channel,
     )
 
     try:

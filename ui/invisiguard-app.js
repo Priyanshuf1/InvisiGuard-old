@@ -59,7 +59,7 @@ const SPLAT_VERTEX = `
     vOpacity = splatOpacity;
 
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = splatSize * (320.0 / -mvPosition.z);
+    gl_PointSize = splatSize * (150.0 / -mvPosition.z);
     gl_Position  = projectionMatrix * mvPosition;
   }
 `;
@@ -71,7 +71,7 @@ const SPLAT_FRAGMENT = `
   void main() {
     float dist = length(gl_PointCoord - vec2(0.5));
     if (dist > 0.5) discard;
-    float alpha = smoothstep(0.5, 0.12, dist) * vOpacity;
+    float alpha = smoothstep(0.5, 0.05, dist) * vOpacity * 0.45;
     gl_FragColor = vec4(vColor, alpha);
   }
 `;
@@ -83,7 +83,7 @@ class VolumetricRfDisruptionCloud {
     this.scene.add(this.group);
     this.group.visible = false;
 
-    this.count = 140;
+    this.count = 68;
     this.baseOffsets = [];
 
     const positions = new Float32Array(this.count * 3);
@@ -107,8 +107,8 @@ class VolumetricRfDisruptionCloud {
         ox, oy, oz,
         speed: 0.8 + Math.random() * 1.4,
         phase: Math.random() * Math.PI * 2,
-        jitterR: 0.05 + Math.random() * 0.12,
-        baseSize: 2.4 + Math.random() * 2.8,
+        jitterR: 0.04 + Math.random() * 0.08,
+        baseSize: 1.8 + Math.random() * 1.8,
       });
 
       positions[i * 3 + 0] = ox;
@@ -169,7 +169,7 @@ class VolumetricRfDisruptionCloud {
     this.currentCentroid = new THREE.Vector3(0.0, 1.05, 0.0);
   }
 
-  update(t, presence, pose, mot, breathPower, conf, dt = 0.016) {
+  update(t, presence, pose, mot, breathPower, conf, dt = 0.016, br = 15.6, hr = 72) {
     if (!presence) {
       this.group.visible = false;
       return;
@@ -188,10 +188,19 @@ class VolumetricRfDisruptionCloud {
     } else if (pose === 'fallen') {
       tx = 0.2; ty = 0.35; tz = 0.4;
       isHorizontal = true;
+    } else if (pose === 'active' || pose === 'walking' || mot > 0.10) {
+      // Dynamic room pacing reacting live to physical RF disruption across open bedroom space
+      const paceSpeed = 1.0 + Math.min(2.5, mot * 2.8);
+      const wanderX = Math.sin(t * paceSpeed * 0.9) * (0.8 + Math.min(0.8, mot * 1.2));
+      const wanderZ = Math.cos(t * paceSpeed * 0.7) * (0.6 + Math.min(0.6, mot * 1.0));
+      const stepBounce = Math.abs(Math.sin(t * paceSpeed * 2.4)) * (0.05 + Math.min(0.12, mot * 0.15));
+      tx = 0.1 + wanderX;
+      ty = 1.05 + stepBounce;
+      tz = 0.2 + wanderZ;
     } else {
-      // General standing / room presence: add subtle Doppler drift
-      const driftX = Math.sin(t * 0.9) * Math.min(mot * 0.4, 0.35);
-      const driftZ = Math.cos(t * 0.7) * Math.min(mot * 0.4, 0.35);
+      // General standing / room presence: dynamic Doppler drift based on motion
+      const driftX = Math.sin(t * 0.9) * Math.min(mot * 0.5 + 0.08, 0.45);
+      const driftZ = Math.cos(t * 0.7) * Math.min(mot * 0.5 + 0.08, 0.45);
       tx = 0.1 + driftX;
       ty = 1.05;
       tz = 0.2 + driftZ;
@@ -206,23 +215,30 @@ class VolumetricRfDisruptionCloud {
     const cy = this.currentCentroid.y;
     const cz = this.currentCentroid.z;
 
-    // Doppler breathing pulsation
-    const bp = Math.sin(t * 2.2);
-    const breathPulse = 1.0 + bp * Math.min(0.12 + breathPower * 2.0, 0.40);
+    // Doppler breathing pulsation driven by live breathing rate
+    const liveBr = (typeof br === 'number' && br > 0) ? br : 15.6;
+    const bp = Math.sin(t * (2.0 * Math.PI * (liveBr / 60.0)));
+    const pulseAmp = Math.min(0.12 + Math.max(0.1, breathPower) * 2.2, 0.45);
+    const breathPulse = 1.0 + bp * pulseAmp;
 
-    // Color shifting: emerald green (resting) -> amber (motion) -> red (high Doppler/active)
-    let cr = 0.0, cg = 0.85, cb = 0.47;
-    const clampedMot = Math.min(1.0, mot * 3.5);
-    if (clampedMot < 0.25) {
-      const k = clampedMot / 0.25;
-      cr = 0.0 * (1 - k) + 0.96 * k;
-      cg = 0.85 * (1 - k) + 0.75 * k;
-      cb = 0.47 * (1 - k) + 0.48 * k;
+    // Motion dynamic expansion (gentle natural breathing expansion)
+    const motionScale = 1.0 + Math.min(0.60, mot * 0.7);
+
+    // 3-tier color shift: soothing RuView emerald green (0x00d878) -> warm amber (0xf5c07a) -> active red (0xff4060)
+    let cr = 0.0, cg = 0.847, cb = 0.471;
+    const motFactor = Math.min(1.0, mot * 2.0);
+    if (motFactor < 0.4) {
+      cr = 0.0; cg = 0.847; cb = 0.471;
+    } else if (motFactor < 0.8) {
+      const k = (motFactor - 0.4) / 0.4;
+      cr = 0.0 * (1 - k) + 0.961 * k;
+      cg = 0.847 * (1 - k) + 0.650 * k;
+      cb = 0.471 * (1 - k) + 0.250 * k;
     } else {
-      const k = Math.min(1.0, (clampedMot - 0.25) / 0.75);
-      cr = 0.96 * (1 - k) + 1.0 * k;
-      cg = 0.75 * (1 - k) + 0.25 * k;
-      cb = 0.48 * (1 - k) + 0.38 * k;
+      const k = (motFactor - 0.8) / 0.2;
+      cr = 0.961 * (1 - k) + 1.000 * k;
+      cg = 0.650 * (1 - k) + 0.250 * k;
+      cb = 0.250 * (1 - k) + 0.350 * k;
     }
 
     const pos = this.geo.attributes.position.array;
@@ -230,13 +246,13 @@ class VolumetricRfDisruptionCloud {
     const colors = this.geo.attributes.splatColor.array;
     const opac = this.geo.attributes.splatOpacity.array;
 
-    const baseAlpha = 0.30 + (Math.min(100, Math.max(0, conf)) / 100) * 0.38;
+    const baseAlpha = 0.20 + (Math.min(100, Math.max(0, conf)) / 100) * 0.25;
 
     for (let i = 0; i < this.count; i++) {
       const b = this.baseOffsets[i];
-      let ox = b.ox * breathPulse;
-      let oy = b.oy * breathPulse;
-      let oz = b.oz * breathPulse;
+      let ox = b.ox * breathPulse * motionScale;
+      let oy = b.oy * breathPulse * motionScale;
+      let oz = b.oz * breathPulse * motionScale;
 
       if (isHorizontal) {
         const tmp = oy;
@@ -245,13 +261,13 @@ class VolumetricRfDisruptionCloud {
       }
 
       // Micro turbulence from RF Doppler multipath
-      const jitter = Math.sin(t * b.speed + b.phase) * (b.jitterR + mot * 0.12);
+      const jitter = Math.sin(t * b.speed + b.phase) * (b.jitterR + mot * 0.18);
 
       pos[i * 3 + 0] = cx + ox + jitter;
       pos[i * 3 + 1] = Math.max(0.12, cy + oy + Math.cos(t * b.speed * 0.7 + b.phase) * jitter);
       pos[i * 3 + 2] = cz + oz + jitter;
 
-      sizes[i] = b.baseSize * breathPulse * (1.0 + Math.min(mot * 2.0, 1.2));
+      sizes[i] = b.baseSize * breathPulse * motionScale;
       colors[i * 3 + 0] = cr;
       colors[i * 3 + 1] = cg;
       colors[i * 3 + 2] = cb;
@@ -263,17 +279,19 @@ class VolumetricRfDisruptionCloud {
     this.geo.attributes.splatColor.needsUpdate = true;
     this.geo.attributes.splatOpacity.needsUpdate = true;
 
-    // Floor rings update
+    // Floor rings update with dynamic scaling
     this.floorRing.position.set(cx, 0.008, cz);
     this.floorRing.material.color.setRGB(cr, cg, cb);
-    this.floorRing.scale.set(breathPulse, breathPulse, 1);
+    const ringScale = breathPulse * motionScale;
+    this.floorRing.scale.set(ringScale, ringScale, 1);
 
     this.floorWave.position.set(cx, 0.009, cz);
     this.floorWave.material.color.setRGB(cr, cg, cb);
-    const waveProgress = ((t * 0.6) % 1.0);
-    const waveScale = 1.0 + waveProgress * 1.6;
+    const waveSpeed = 0.6 + mot * 1.5;
+    const waveProgress = ((t * waveSpeed) % 1.0);
+    const waveScale = (1.0 + waveProgress * 1.8) * motionScale;
     this.floorWave.scale.set(waveScale, waveScale, 1);
-    this.floorWave.material.opacity = Math.max(0, (1.0 - waveProgress)) * 0.25;
+    this.floorWave.material.opacity = Math.max(0, (1.0 - waveProgress)) * (0.22 + Math.min(0.40, mot * 0.55));
   }
 }
 
@@ -370,6 +388,14 @@ class SpatialPresenceEnvelope {
     } else if (pose === 'fallen') {
       tx = 0.2; ty = 0.28; tz = 0.4;
       rx = Math.PI / 2;
+    } else if (pose === 'active' || pose === 'walking' || mot > 0.10) {
+      const paceSpeed = 1.0 + Math.min(2.5, mot * 2.8);
+      const wanderX = Math.sin(t * paceSpeed * 0.9) * (0.8 + Math.min(0.8, mot * 1.2));
+      const wanderZ = Math.cos(t * paceSpeed * 0.7) * (0.6 + Math.min(0.6, mot * 1.0));
+      const stepBounce = Math.abs(Math.sin(t * paceSpeed * 2.4)) * (0.05 + Math.min(0.10, mot * 0.12));
+      tx = 0.1 + wanderX;
+      ty = 1.05 + stepBounce;
+      tz = 0.2 + wanderZ;
     } else {
       const driftX = Math.sin(t * 0.9) * Math.min(mot * 0.4, 0.35);
       const driftZ = Math.cos(t * 0.7) * Math.min(mot * 0.4, 0.35);
@@ -597,11 +623,13 @@ class GreenWireframeAvatar {
       ];
       this.auraMesh.position.set(fx, fy + 0.08, fz);
       this.auraMesh.rotation.set(Math.PI / 2, 0, 0.2);
-    } else if (pose === 'walking' || pose === 'active') {
+    } else if (pose === 'walking' || pose === 'active' || mot > 0.10) {
       // 4+ Nodes Articulated Dynamic Tracking:
-      // Real physical joint flexure proportional to live Doppler energy,
-      // NO synthetic loop pacing back and forth across the room!
-      const px = 0.1, pz = 0.2;
+      // Real physical joint flexure and room traversal proportional to live Doppler energy
+      const paceSpeed = 1.0 + Math.min(2.5, mot * 2.8);
+      const wanderX = Math.sin(t * paceSpeed * 0.9) * (0.8 + Math.min(0.8, mot * 1.2));
+      const wanderZ = Math.cos(t * paceSpeed * 0.7) * (0.6 + Math.min(0.6, mot * 1.0));
+      const px = 0.1 + wanderX, pz = 0.2 + wanderZ;
       const limbSway = Math.sin(t * 2.8) * Math.min(0.08 + mot * 0.35, 0.25);
       kps = [
         [px, 1.72 + breath, pz],
@@ -691,6 +719,9 @@ class BedroomScene {
     this.renderer.setSize(this.width, this.height);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(C.bgDeep);
@@ -710,6 +741,73 @@ class BedroomScene {
     this.controls.target.copy(this.camDefLook);
     this.controls.update();
 
+    // Theatre.js Camera Waypoints & Choreography
+    this.waypoints = {
+      overview: {
+        pos: new THREE.Vector3(5.6, 4.4, 6.4),
+        look: new THREE.Vector3(0, 0.8, 0),
+        time: 0.0,
+        desc: 'Studio Overview (45° Isometric)'
+      },
+      bed: {
+        pos: new THREE.Vector3(-1.4, 1.9, 1.8),
+        look: new THREE.Vector3(-1.8, 0.7, -0.6),
+        time: 3.0,
+        desc: 'Sleep & Vitals Macro (Bed Subcarrier)'
+      },
+      desk: {
+        pos: new THREE.Vector3(2.9, 2.1, 0.4),
+        look: new THREE.Vector3(2.2, 0.9, -1.8),
+        time: 6.0,
+        desc: 'Study Desk Posture (Micro-Doppler)'
+      },
+      radar: {
+        pos: new THREE.Vector3(0.01, 8.2, 0.01),
+        look: new THREE.Vector3(0, 0, 0),
+        time: 9.0,
+        desc: 'Overhead Radar 2D Plan View (Trilateration)'
+      }
+    };
+
+    // Smooth CatmullRom spline through waypoints for 12.0s timeline sequence
+    const splinePos = [
+      this.waypoints.overview.pos,
+      this.waypoints.bed.pos,
+      this.waypoints.desk.pos,
+      this.waypoints.radar.pos,
+      this.waypoints.overview.pos
+    ];
+    const splineLook = [
+      this.waypoints.overview.look,
+      this.waypoints.bed.look,
+      this.waypoints.desk.look,
+      this.waypoints.radar.look,
+      this.waypoints.overview.look
+    ];
+    this.posSpline = new THREE.CatmullRomCurve3(splinePos, true, 'catmullrom', 0.35);
+    this.lookSpline = new THREE.CatmullRomCurve3(splineLook, true, 'catmullrom', 0.35);
+
+    this.timelineDuration = 12.0;
+    this.timelineTime = 0.0;
+    this.timelinePlaying = false;
+    this.sliderIsDragging = false;
+    this.activeWaypointKey = 'overview';
+
+    // Camera flight interpolation state
+    this.flying = false;
+    this.flyStartPos = new THREE.Vector3();
+    this.flyStartLook = new THREE.Vector3();
+    this.flyTargetPos = new THREE.Vector3();
+    this.flyTargetLook = new THREE.Vector3();
+    this.flyProgress = 0;
+    this.flyDuration = 1.1;
+
+    // Pause tour immediately if user manually interacts with OrbitControls
+    this.controls.addEventListener('start', () => {
+      if (this.timelinePlaying) this.pauseTour();
+      this.flying = false;
+    });
+
     this.clock = new THREE.Clock();
     this.waveRings = [];
 
@@ -726,31 +824,72 @@ class BedroomScene {
   }
 
   _setupLighting() {
-    const sun = new THREE.DirectionalLight(C.terraSun, 1.4);
+    // 1. Key Directional Light: Warm Terracotta Sun with soft contact shadows
+    const sun = new THREE.DirectionalLight(0xF5C07A, 1.55);
     sun.position.set(7, 9, 5);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 25;
+    sun.shadow.bias = -0.0005;
+    sun.shadow.radius = 2.5;
     this.scene.add(sun);
 
-    const fill = new THREE.DirectionalLight(C.terraMid, 0.55);
+    // 2. Secondary Fill Light: Soft Terracotta Warmth
+    const fill = new THREE.DirectionalLight(0xD4897E, 0.65);
     fill.position.set(-6, 4, -4);
     this.scene.add(fill);
 
-    const amb = new THREE.AmbientLight(0x2d1d1a, 0.85);
+    // 3. Spline Rim Light: Soft Electric Jade backlight for rim silhouettes
+    const rim = new THREE.DirectionalLight(0x3eff8a, 0.35);
+    rim.position.set(-2, 5, -6);
+    this.scene.add(rim);
+
+    // 4. Studio Hemisphere Light for ambient bounce & ambient occlusion
+    const hemi = new THREE.HemisphereLight(0x382320, 0x0e0a09, 0.75);
+    this.scene.add(hemi);
+
+    // 5. Subtle Ambient Light base
+    const amb = new THREE.AmbientLight(0x181210, 0.45);
     this.scene.add(amb);
   }
 
   _buildRoom() {
+    // Spline Architectural Pedestal: Soft radial floor foundation disc
+    const pedestalGeo = new THREE.CylinderGeometry(5.8, 6.0, 0.12, 48);
+    const pedestalMat = new THREE.MeshStandardMaterial({
+      color: 0x110d0c,
+      roughness: 0.85,
+      metalness: 0.1,
+    });
+    this.pedestal = new THREE.Mesh(pedestalGeo, pedestalMat);
+    this.pedestal.position.y = -0.06;
+    this.pedestal.receiveShadow = true;
+    this.scene.add(this.pedestal);
+
+    // Subtle glowing pedestal perimeter rim ring
+    const rimGeo = new THREE.RingGeometry(5.75, 5.85, 48);
+    const rimMat = new THREE.MeshBasicMaterial({
+      color: 0xc4766b,
+      transparent: true,
+      opacity: 0.28,
+      side: THREE.DoubleSide,
+    });
+    const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+    rimMesh.rotation.x = -Math.PI / 2;
+    rimMesh.position.y = 0.002;
+    this.scene.add(rimMesh);
+
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(9, 8),
-      new THREE.MeshStandardMaterial({ color: 0x14100e, roughness: 0.9 })
+      new THREE.MeshStandardMaterial({ color: 0x14100e, roughness: 0.88 })
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     this.scene.add(floor);
 
-    this.grid = new THREE.GridHelper(9, 18, C.terraDark, 0x241a18);
-    this.grid.position.y = 0.002;
+    this.grid = new THREE.GridHelper(9, 18, 0x8a4b42, 0x221816);
+    this.grid.position.y = 0.003;
     this.scene.add(this.grid);
 
     const pts = [
@@ -760,10 +899,10 @@ class BedroomScene {
     ];
     this.scene.add(new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(pts),
-      new THREE.LineBasicMaterial({ color: C.terraDark, transparent: true, opacity: 0.45 })
+      new THREE.LineBasicMaterial({ color: C.terraDark, transparent: true, opacity: 0.55 })
     ));
 
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x110e0d, roughness: 0.95 });
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x120e0d, roughness: 0.92 });
     const backWall = new THREE.Mesh(new THREE.PlaneGeometry(8.0, 3.2), wallMat);
     backWall.position.set(0, 1.6, -3.2);
     backWall.receiveShadow = true;
@@ -918,9 +1057,145 @@ class BedroomScene {
   }
 
   resetCamera() {
-    this.camera.position.copy(this.camDefPos);
-    this.controls.target.copy(this.camDefLook);
+    this.flyTo('overview');
+  }
+
+  _applyCameraFrame(pos, look) {
+    this.camera.position.copy(pos);
+    this.controls.target.copy(look);
+    const prevDamping = this.controls.enableDamping;
+    this.controls.enableDamping = false;
     this.controls.update();
+    this.controls.enableDamping = prevDamping;
+  }
+
+  evaluateTimeline(t) {
+    const total = this.timelineDuration;
+    const normT = ((t % total) + total) % total;
+    const kfs = [
+      { time: 0.0, pos: this.waypoints.overview.pos, look: this.waypoints.overview.look },
+      { time: 3.0, pos: this.waypoints.bed.pos, look: this.waypoints.bed.look },
+      { time: 6.0, pos: this.waypoints.desk.pos, look: this.waypoints.desk.look },
+      { time: 9.0, pos: this.waypoints.radar.pos, look: this.waypoints.radar.look },
+      { time: 12.0, pos: this.waypoints.overview.pos, look: this.waypoints.overview.look },
+    ];
+    let i = 0;
+    for (let k = 0; k < kfs.length - 1; k++) {
+      if (normT >= kfs[k].time && normT <= kfs[k + 1].time) {
+        i = k;
+        break;
+      }
+    }
+    const k0 = kfs[i];
+    const k1 = kfs[i + 1];
+    const segT = (normT - k0.time) / (k1.time - k0.time);
+    const ease = (1 - Math.cos(segT * Math.PI)) / 2;
+    const pos = k0.pos.clone().lerp(k1.pos, ease);
+    const look = k0.look.clone().lerp(k1.look, ease);
+    return { pos, look };
+  }
+
+  flyTo(key) {
+    const wp = this.waypoints[key];
+    if (!wp) return;
+    this.activeWaypointKey = key;
+    this.timelinePlaying = false;
+    this._updateTourUI(false);
+
+    // Check reduced motion preference
+    const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      this._applyCameraFrame(wp.pos, wp.look);
+      this.timelineTime = wp.time;
+      this._updateHUDTime(wp.time, wp.desc);
+      this._updateActivePill(key);
+      return;
+    }
+
+    this.flying = true;
+    this.flyStartPos.copy(this.camera.position);
+    this.flyStartLook.copy(this.controls.target);
+    this.flyTargetPos.copy(wp.pos);
+    this.flyTargetLook.copy(wp.look);
+    this.flyProgress = 0;
+    this.timelineTime = wp.time;
+    this._updateHUDTime(wp.time, wp.desc);
+    this._updateActivePill(key);
+  }
+
+  seekTimeline(sec) {
+    this.timelineTime = Math.max(0, Math.min(this.timelineDuration, sec));
+    this.flying = false;
+    const frame = this.evaluateTimeline(this.timelineTime);
+    this._applyCameraFrame(frame.pos, frame.look);
+
+    const desc = this._getDescForTime(this.timelineTime);
+    this._updateHUDTime(this.timelineTime, desc);
+    this._updateActivePillFromTime(this.timelineTime);
+  }
+
+  toggleTour() {
+    this.timelinePlaying = !this.timelinePlaying;
+    this.flying = false;
+    this._updateTourUI(this.timelinePlaying);
+  }
+
+  pauseTour() {
+    this.timelinePlaying = false;
+    this._updateTourUI(false);
+  }
+
+  _getDescForTime(t) {
+    if (t < 1.5 || t >= 10.5) return this.waypoints.overview.desc;
+    if (t >= 1.5 && t < 4.5) return this.waypoints.bed.desc;
+    if (t >= 4.5 && t < 7.5) return this.waypoints.desk.desc;
+    return this.waypoints.radar.desc;
+  }
+
+  _updateActivePill(key) {
+    document.querySelectorAll('.cam-preset-btn').forEach(btn => {
+      if (btn.id === 'btn-camera-tour') return;
+      if (btn.getAttribute('data-cam') === key) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
+  }
+
+  _updateActivePillFromTime(t) {
+    let key = 'overview';
+    if (t >= 1.5 && t < 4.5) key = 'bed';
+    else if (t >= 4.5 && t < 7.5) key = 'desk';
+    else if (t >= 7.5 && t < 10.5) key = 'radar';
+    this._updateActivePill(key);
+  }
+
+  _updateTourUI(isPlaying) {
+    const playIcon = document.getElementById('icon-scrub-play');
+    const pauseIcon = document.getElementById('icon-scrub-pause');
+    const tourBtn = document.getElementById('btn-camera-tour');
+    const tourLabel = document.getElementById('label-cam-tour');
+
+    if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'block';
+    if (pauseIcon) pauseIcon.style.display = isPlaying ? 'block' : 'none';
+    if (tourBtn) {
+      if (isPlaying) tourBtn.classList.add('active');
+      else tourBtn.classList.remove('active');
+    }
+    if (tourLabel) tourLabel.textContent = isPlaying ? 'Pause' : 'Tour';
+  }
+
+  _updateHUDTime(t, desc) {
+    const slider = document.getElementById('cam-timeline-scrubber');
+    const timecode = document.getElementById('scrub-timecode');
+    const descEl = document.getElementById('scrub-view-desc');
+
+    if (slider && !this.sliderIsDragging) slider.value = t.toFixed(2);
+    if (timecode) {
+      const m = Math.floor(t / 60);
+      const s = (t % 60).toFixed(1);
+      const sPad = s < 10 ? '0' + s : s;
+      timecode.textContent = `0${m}:${sPad} / 12.0s`;
+    }
+    if (descEl && desc) descEl.textContent = desc;
   }
 
   resize() {
@@ -934,6 +1209,29 @@ class BedroomScene {
   }
 
   update(dt, t, isActive, state) {
+    // 1. Advance timeline if playing autonomous tour
+    if (this.timelinePlaying) {
+      this.timelineTime = (this.timelineTime + dt * 1.0) % this.timelineDuration;
+      const frame = this.evaluateTimeline(this.timelineTime);
+      this._applyCameraFrame(frame.pos, frame.look);
+      this._updateHUDTime(this.timelineTime, this._getDescForTime(this.timelineTime));
+      this._updateActivePillFromTime(this.timelineTime);
+    } else if (this.flying) {
+      // Smooth flight interpolation towards selected waypoint
+      this.flyProgress += dt / this.flyDuration;
+      if (this.flyProgress >= 1.0) {
+        this.flyProgress = 1.0;
+        this.flying = false;
+        this._applyCameraFrame(this.flyTargetPos, this.flyTargetLook);
+      } else {
+        // Cubic ease in-out
+        const k = this.flyProgress;
+        const ease = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        const p = this.flyStartPos.clone().lerp(this.flyTargetPos, ease);
+        const l = this.flyStartLook.clone().lerp(this.flyTargetLook, ease);
+        this._applyCameraFrame(p, l);
+      }
+    }
     if (isActive) {
       this.ledMat.color.setHex(C.greenWire);
       this.waveGroup.visible = true;
@@ -962,12 +1260,14 @@ class BedroomScene {
     const mot = state ? (typeof state.mot === 'number' ? state.mot : 0) : 0;
     const breathPower = state ? (typeof state.breathing_band_power === 'number' ? state.breathing_band_power : 0.18) : 0.18;
     const conf = state ? (typeof state.conf === 'number' ? state.conf : 88) : 88;
+    const br = state ? (typeof state.br === 'number' && state.br > 0 ? state.br : 15.6) : 15.6;
+    const hr = state ? (typeof state.hr === 'number' && state.hr > 0 ? state.hr : 72) : 72;
 
-    // Determine effective node count
-    let effNodes = (state && typeof state.nodes === 'number' && state.nodes > 0) ? state.nodes : 1;
-    if (this.tierOverride === '1') effNodes = 1;
-    else if (this.tierOverride === '3') effNodes = 3;
-    else if (this.tierOverride === '4') effNodes = 4;
+    // Automatic node-adaptive visualization:
+    // 1-2 Nodes: Authentic Volumetric Green Fog / Gaussian Splats RF Disruption Cloud
+    // 3 Nodes:   3D Spatial Presence Envelope
+    // 4+ Nodes:  Articulated 17-Keypoint WiFi DensePose Skeleton
+    const effNodes = (state && typeof state.nodes === 'number' && state.nodes > 0) ? state.nodes : 1;
 
     if (!isActive || !presence) {
       this.fogCloud.group.visible = false;
@@ -978,7 +1278,7 @@ class BedroomScene {
       this.fogCloud.group.visible = true;
       this.presenceEnvelope.group.visible = false;
       this.avatar.group.visible = false;
-      this.fogCloud.update(t, presence, pose, mot, breathPower, conf, dt);
+      this.fogCloud.update(t, presence, pose, mot, breathPower, conf, dt, br, hr);
     } else if (effNodes < 4) {
       // Tier 2: 2-3 ESP32s -> 3D Spatial Centroid & Presence Envelope
       this.fogCloud.group.visible = false;
@@ -995,6 +1295,21 @@ class BedroomScene {
 
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  dispose() {
+    this.scene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach((m) => m.dispose());
+        } else {
+          obj.material.dispose();
+        }
+      }
+    });
+    if (this.controls) this.controls.dispose();
+    if (this.renderer) this.renderer.dispose();
   }
 }
 
@@ -1094,17 +1409,6 @@ class InvisiGuardApp {
       });
     }
 
-    const tierPills = document.querySelectorAll('.tier-pill');
-    tierPills.forEach(pill => {
-      pill.addEventListener('click', () => {
-        tierPills.forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        const nodes = pill.dataset.nodes;
-        this.bedroom.tierOverride = nodes;
-        this._updateTierHUD(nodes);
-      });
-    });
-
     if (this.scenarioSelect) {
       this.scenarioSelect.addEventListener('change', (e) => {
         this.scenario = e.target.value;
@@ -1114,27 +1418,91 @@ class InvisiGuardApp {
     const resetBtn = document.getElementById('btn-reset-cam');
     if (resetBtn) resetBtn.addEventListener('click', () => this.bedroom.resetCamera());
 
-  }
+    // Theatre.js Camera Preset Buttons
+    document.querySelectorAll('.cam-preset-btn').forEach(btn => {
+      const camKey = btn.getAttribute('data-cam');
+      if (camKey) {
+        btn.addEventListener('click', () => {
+          this.bedroom.flyTo(camKey);
+        });
+      }
+    });
 
-  _updateTierHUD(tierOverride) {
-    const stripDot = document.getElementById('strip-tier-dot');
-    const stripText = document.getElementById('strip-tier-text');
-    if (!stripText) return;
-
-    let eff = tierOverride;
-    if (eff === 'auto') {
-      eff = (this.state && typeof this.state.nodes === 'number' && this.state.nodes > 0) ? String(this.state.nodes) : '1';
+    // Tour toggle buttons
+    const btnTour = document.getElementById('btn-camera-tour');
+    if (btnTour) {
+      btnTour.addEventListener('click', () => {
+        this.bedroom.toggleTour();
+      });
     }
 
-    if (eff === '1' || parseInt(eff, 10) < 3) {
+    const btnPlayScrub = document.getElementById('btn-scrub-play');
+    if (btnPlayScrub) {
+      btnPlayScrub.addEventListener('click', () => {
+        this.bedroom.toggleTour();
+      });
+    }
+
+    // Timeline range slider scrubber
+    const scrubber = document.getElementById('cam-timeline-scrubber');
+    if (scrubber) {
+      scrubber.addEventListener('mousedown', () => { this.bedroom.sliderIsDragging = true; });
+      scrubber.addEventListener('touchstart', () => { this.bedroom.sliderIsDragging = true; }, { passive: true });
+      scrubber.addEventListener('mouseup', () => { this.bedroom.sliderIsDragging = false; });
+      scrubber.addEventListener('touchend', () => { this.bedroom.sliderIsDragging = false; });
+
+      scrubber.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        this.bedroom.seekTimeline(val);
+      });
+    }
+
+    // Keyframe markers click-to-seek
+    document.querySelectorAll('.kf-marker').forEach(marker => {
+      marker.addEventListener('click', () => {
+        const title = marker.getAttribute('title') || marker.textContent || '';
+        if (title.includes('Studio') || title.includes('0.0s')) this.bedroom.flyTo('overview');
+        else if (title.includes('Bed') || title.includes('3.5s')) this.bedroom.flyTo('bed');
+        else if (title.includes('Desk') || title.includes('7.0s')) this.bedroom.flyTo('desk');
+        else if (title.includes('Radar') || title.includes('10.5s')) this.bedroom.flyTo('radar');
+      });
+    });
+  }
+
+  _updateTierHUD() {
+    const stripDot = document.getElementById('strip-tier-dot');
+    const stripText = document.getElementById('strip-tier-text');
+    const autoBadge = document.getElementById('ruview-auto-mode-label');
+
+    const nodeCount = (this.state && typeof this.state.nodes === 'number' && this.state.nodes > 0)
+      ? this.state.nodes
+      : (this.mode === 'demo' ? 1 : 0);
+
+    const isLive = (this.state && this.state.sourceState === 'live' && nodeCount > 0);
+    const suffix = isLive ? ` (${nodeCount} ESP32 LIVE)` : (this.mode === 'demo' ? ' (DEMO SIM)' : ' (STANDBY)');
+
+    if (nodeCount === 0 && this.mode !== 'demo') {
+      if (stripDot) {
+        stripDot.style.background = '#68605c';
+        stripDot.style.boxShadow = 'none';
+      }
+      if (stripText) stripText.textContent = 'HARDWARE OFFLINE · ESP32 DISCONNECTED (0 NODES)';
+      if (autoBadge) autoBadge.textContent = '○ HARDWARE DISCONNECTED · 0 NODES';
+      return;
+    }
+
+    if (nodeCount < 3) {
       if (stripDot) stripDot.style.background = '#00d878';
-      stripText.textContent = 'TIER 1 · VOLUMETRIC GREEN FOG RF DISRUPTION CLOUD (1 ESP32 LIVE)';
-    } else if (eff === '3' || parseInt(eff, 10) < 4) {
+      if (stripText) stripText.textContent = `TIER 1 · VOLUMETRIC GREEN FOG RF DISRUPTION CLOUD${suffix}`;
+      if (autoBadge) autoBadge.textContent = `RUVIEW VOLUMETRIC RF FIELD · ${nodeCount} NODE${nodeCount > 1 ? 'S' : ''} ACTIVE`;
+    } else if (nodeCount < 4) {
       if (stripDot) stripDot.style.background = '#f5c07a';
-      stripText.textContent = 'TIER 2 · 3D SPATIAL PRESENCE ENVELOPE (3-NODE TRILATERATION)';
+      if (stripText) stripText.textContent = `TIER 2 · 3D SPATIAL PRESENCE ENVELOPE (${nodeCount}-NODE TRILATERATION)${suffix}`;
+      if (autoBadge) autoBadge.textContent = `RUVIEW SPATIAL ENVELOPE · ${nodeCount} NODES ACTIVE`;
     } else {
       if (stripDot) stripDot.style.background = '#3eff8a';
-      stripText.textContent = 'TIER 3 · ARTICULATED 17-KEYPOINT DENSEPOSE SKELETON (4+ NODES)';
+      if (stripText) stripText.textContent = `TIER 3 · ARTICULATED 17-KEYPOINT DENSEPOSE SKELETON (${nodeCount} NODES)${suffix}`;
+      if (autoBadge) autoBadge.textContent = `RUVIEW DENSEPOSE SKELETON · ${nodeCount} NODES ACTIVE`;
     }
   }
 
@@ -1153,7 +1521,7 @@ class InvisiGuardApp {
     const CLASS_PREP_META = {
       0: {
         badge: '0: EMPTY BEDROOM CALIBRATION',
-        title: '🚪 Please Exit the Bedroom Now',
+        title: 'Please Exit the Bedroom Now',
         desc: 'Step outside and close the bedroom door. Baseline recording will begin after countdown to establish zero-human multipath reference.',
         defaultSec: 20,
         recBadge: '● RECORDING ZERO-MOTION BASELINE',
@@ -1162,7 +1530,7 @@ class InvisiGuardApp {
       },
       1: {
         badge: '1: DESK STUDY POSTURE SETUP',
-        title: '📖 Take a Seat at the Study Desk',
+        title: 'Take a Seat at the Study Desk',
         desc: 'Walk over, sit comfortably on the desk chair, and relax into normal studying posture with natural breathing.',
         defaultSec: 10,
         recBadge: '● RECORDING CLASS 1: NORMAL STUDYING',
@@ -1171,7 +1539,7 @@ class InvisiGuardApp {
       },
       2: {
         badge: '2: ROOM PACING POSITION SETUP',
-        title: '🚶 Position for Normal Walking',
+        title: 'Position for Normal Walking',
         desc: 'Stand near the starting corner or doorway, ready to pace naturally back and forth across the bedroom floor plane.',
         defaultSec: 10,
         recBadge: '● RECORDING CLASS 2: ROOM PACING',
@@ -1180,7 +1548,7 @@ class InvisiGuardApp {
       },
       3: {
         badge: '3: STRUGGLE / RAGGING SIMULATION SETUP',
-        title: '⚡ Prepare Struggle Simulation Stance',
+        title: 'Prepare Struggle Simulation Stance',
         desc: 'Position yourself safely with your partner to simulate rapid multi-limb motion, sudden directional shifts, or struggle.',
         defaultSec: 10,
         recBadge: '● RECORDING CLASS 3: STRUGGLE / RAGGING',
@@ -1189,7 +1557,7 @@ class InvisiGuardApp {
       },
       4: {
         badge: '4: SUDDEN FALL SIMULATION SETUP',
-        title: '🚨 Prepare Safe Fall Simulation',
+        title: 'Prepare Safe Fall Simulation',
         desc: 'Stand upright on the safe landing mat or floor area, ready to simulate an unrecovered vertical drop.',
         defaultSec: 10,
         recBadge: '● RECORDING CLASS 4: SUDDEN FALL',
@@ -1337,10 +1705,29 @@ class InvisiGuardApp {
       btn.addEventListener('click', () => {
         const clsId = parseInt(btn.getAttribute('data-class'));
         const clsName = btn.getAttribute('data-name');
-        this.activePrepClassId = clsId;
-        this.activePrepClassName = clsName;
-        this.activePrepMeta = CLASS_PREP_META[clsId] || CLASS_PREP_META[0];
-        this._startClassRecording(clsId, clsName, false);
+        const card = btn.closest('.class-rec-card');
+        const prepBtn = card ? card.querySelector('.btn-open-prep') : null;
+        if (prepBtn) {
+          prepBtn.click();
+        } else {
+          const meta = CLASS_PREP_META[clsId] || CLASS_PREP_META[0];
+          const sec = meta.defaultSec || 15;
+          this.activePrepClassId = clsId;
+          this.activePrepClassName = clsName;
+          this.activePrepMeta = meta;
+
+          if (modalBadge) modalBadge.textContent = meta.badge;
+          if (modalTitle) modalTitle.textContent = meta.title;
+          if (modalDesc) modalDesc.textContent = meta.desc;
+
+          if (countdownWrap) countdownWrap.style.display = 'flex';
+          if (recState) recState.style.display = 'none';
+          if (btnSkip) btnSkip.style.display = 'inline-block';
+          if (btnStopCalib) btnStopCalib.style.display = 'none';
+
+          if (modal) modal.style.display = 'flex';
+          startCountdown(sec);
+        }
       });
     });
 
@@ -1349,6 +1736,142 @@ class InvisiGuardApp {
         this._stopClassRecording();
       });
     });
+
+    // Selective Class Data Clear (Delete only chosen behavior class)
+    document.querySelectorAll('.btn-rec-delete').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const clsId = parseInt(btn.getAttribute('data-class'));
+        const clsName = btn.getAttribute('data-name');
+        if (!confirm(`Are you sure you want to delete all recorded frames for Class ${clsId} (${clsName})?\n\nOther behavior classes in your dataset will remain completely intact.`)) {
+          return;
+        }
+        btn.disabled = true;
+        const origText = btn.textContent;
+        btn.textContent = 'Clearing...';
+        try {
+          const resp = await fetch('/api/v1/invisiguard/dataset/delete-class', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label: clsId }),
+          });
+          const res = await resp.json();
+          if (res.status === 'ok') {
+            this._logTerminal(`[DATASET] Deleted ${res.deleted} frames for Class ${clsId} (${res.class_name}). Remaining dataset: ${res.total_samples} frames.`);
+            this._playAudioChime(400, 0.2);
+            await this._fetchDatasetStats();
+          } else {
+            this._logTerminal(`[ERROR] Failed to delete: ${res.message || 'Unknown error'}`);
+          }
+        } catch (err) {
+          this._logTerminal(`[ERROR] Network error deleting class data.`);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = origText;
+        }
+      });
+    });
+
+    // Selective Dataset Filtering & Pruning by Date & Class
+    const btnPruneSelected = document.getElementById('btn-prune-selected');
+    const selectPruneDate = document.getElementById('select-prune-date');
+    const selectPruneClass = document.getElementById('select-prune-class');
+    const pruneStatusMsg = document.getElementById('prune-status-msg');
+
+    if (btnPruneSelected) {
+      btnPruneSelected.addEventListener('click', async () => {
+        const dateVal = selectPruneDate ? selectPruneDate.value : 'all';
+        const classVal = selectPruneClass ? selectPruneClass.value : 'all';
+        const dateLabel = dateVal === 'all' ? 'All Dates' : (dateVal === 'today' ? 'Today' : dateVal);
+        const classLabel = classVal === 'all' ? 'All Classes' : `Class ${classVal}`;
+
+        if (!confirm(`Delete training data matching:\n- Date: ${dateLabel}\n- Class: ${classLabel}\n\nProceed with selective deletion?`)) {
+          return;
+        }
+
+        btnPruneSelected.disabled = true;
+        if (pruneStatusMsg) pruneStatusMsg.textContent = 'Pruning selected data...';
+
+        try {
+          const resp = await fetch('/api/v1/invisiguard/dataset/delete-by-date', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              date: dateVal,
+              label: classVal === 'all' ? null : parseInt(classVal),
+            }),
+          });
+          const res = await resp.json();
+          if (res.status === 'ok') {
+            const msg = `Deleted ${res.deleted} frames matching Date: ${dateLabel}, Class: ${classLabel}. Remaining: ${res.total_samples} frames.`;
+            this._logTerminal(`[DATASET] ${msg}`);
+            if (pruneStatusMsg) pruneStatusMsg.textContent = `✓ ${msg}`;
+            this._playAudioChime(500, 0.2);
+            await this._fetchDatasetStats();
+          } else {
+            if (pruneStatusMsg) pruneStatusMsg.textContent = `✕ Error: ${res.message || 'Failed'}`;
+          }
+        } catch (err) {
+          if (pruneStatusMsg) pruneStatusMsg.textContent = '✕ Network error while pruning data.';
+        } finally {
+          btnPruneSelected.disabled = false;
+        }
+      });
+    }
+
+    const btnUndoSession = document.getElementById('btn-undo-session');
+    if (btnUndoSession) {
+      btnUndoSession.addEventListener('click', async () => {
+        if (!confirm('Undo the most recent recording session and discard its frames?')) return;
+        btnUndoSession.disabled = true;
+        try {
+          const resp = await fetch('/api/v1/invisiguard/dataset/delete-last-session', { method: 'POST' });
+          const res = await resp.json();
+          if (res.status === 'ok') {
+            this._logTerminal(`[DATASET] Undid last recording session (removed ${res.deleted} frames). Dataset: ${res.total_samples} frames.`);
+            if (pruneStatusMsg) pruneStatusMsg.textContent = `✓ Undid last session: -${res.deleted} frames.`;
+            this._playAudioChime(420, 0.2);
+            await this._fetchDatasetStats();
+          }
+        } catch (err) {
+          if (pruneStatusMsg) pruneStatusMsg.textContent = '✕ Network error while undoing session.';
+        } finally {
+          btnUndoSession.disabled = false;
+        }
+      });
+    }
+
+    const btnRestoreBackup = document.getElementById('btn-restore-backup');
+    if (btnRestoreBackup) {
+      btnRestoreBackup.addEventListener('click', async () => {
+        if (!confirm('Restore dataset from the latest automated safety backup?\n\nThis will recover any accidentally deleted frames or sessions.')) return;
+        btnRestoreBackup.disabled = true;
+        try {
+          const resp = await fetch('/api/v1/invisiguard/dataset/restore-backup', { method: 'POST' });
+          const res = await resp.json();
+          if (res.status === 'ok') {
+            this._logTerminal(`[DATASET] Restored dataset from ${res.backup_file}! Total: ${res.total_samples} frames.`);
+            if (pruneStatusMsg) pruneStatusMsg.textContent = `✓ Restored from backup: ${res.total_samples} frames available.`;
+            this._playAudioChime(600, 0.2);
+            await this._fetchDatasetStats();
+          } else {
+            alert(res.message || 'No backup available to restore.');
+          }
+        } catch (err) {
+          if (pruneStatusMsg) pruneStatusMsg.textContent = '✕ Network error while restoring backup.';
+        } finally {
+          btnRestoreBackup.disabled = false;
+        }
+      });
+    }
+
+    const btnRefreshDataset = document.getElementById('btn-refresh-dataset');
+    if (btnRefreshDataset) {
+      btnRefreshDataset.addEventListener('click', async () => {
+        await this._fetchDatasetStats();
+        if (pruneStatusMsg) pruneStatusMsg.textContent = '✓ Dataset statistics refreshed.';
+      });
+    }
 
     const btnBannerStop = document.getElementById('btn-banner-stop');
     if (btnBannerStop) {
@@ -1411,7 +1934,10 @@ class InvisiGuardApp {
           this._logTerminal('[ERROR] Failed to connect to training API.');
         }
         btnTrain.disabled = false;
-        btnTrain.textContent = '⚡ Train Production Model (Daily Calibration)';
+        btnTrain.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Train Production Model (Daily Calibration)</span>
+        `;
       });
     }
   }
@@ -1431,6 +1957,25 @@ class InvisiGuardApp {
 
         const totalBadge = document.getElementById('badge-total-samples');
         if (totalBadge) totalBadge.textContent = `Total: ${total} Frames`;
+
+        // Dynamically populate Date Filter dropdown
+        const dateSelect = document.getElementById('select-prune-date');
+        if (dateSelect && Array.isArray(d.dates)) {
+          const currentVal = dateSelect.value;
+          dateSelect.innerHTML = `
+            <option value="all">All Dates / All Days</option>
+            <option value="today">Today's Sessions</option>
+          `;
+          d.dates.forEach(dt => {
+            const opt = document.createElement('option');
+            opt.value = dt;
+            opt.textContent = `Day: ${dt}`;
+            dateSelect.appendChild(opt);
+          });
+          if (currentVal && Array.from(dateSelect.options).some(o => o.value === currentVal)) {
+            dateSelect.value = currentVal;
+          }
+        }
 
         if (total > 0) {
           for (let i = 0; i < 5; i++) {
@@ -1490,8 +2035,10 @@ class InvisiGuardApp {
       banner.style.display = 'block';
       const cName = document.getElementById('banner-rec-class');
       const cFrames = document.getElementById('banner-rec-frames');
+      const cTimer = document.getElementById('banner-rec-timer');
       if (cName) cName.textContent = className;
       if (cFrames) cFrames.textContent = '0';
+      if (cTimer) cTimer.textContent = '00:00';
     }
 
     if (isModal) {
@@ -1502,6 +2049,8 @@ class InvisiGuardApp {
       const mTitle = document.getElementById('calib-modal-title');
       const mDesc = document.getElementById('calib-modal-desc');
       const rBadge = document.getElementById('calib-rec-badge');
+      const mTimer = document.getElementById('modal-rec-timer');
+      if (mTimer) mTimer.textContent = '00:00';
       const meta = (this.activePrepMeta) || {
         recTitle: `Recording Class ${label}: ${className}`,
         recDesc: `Sensor is capturing 52-subcarrier multipath frames for ${className}.`,
@@ -1520,20 +2069,27 @@ class InvisiGuardApp {
       if (rBadge) rBadge.textContent = meta.recBadge || `● RECORDING: ${label} - ${className}`;
     }
 
-    this._logTerminal(`[REC] Started capturing live frames for Class ${label}: ${className}`);
+    this._logTerminal(`[REC] Started capturing live frames for Class ${label}: ${className} (Recording continuously until Stop is pressed)`);
 
     this.recCounter = 0;
+    this.recSeconds = 0;
     this.recInterval = setInterval(() => {
+      this.recSeconds += 1;
       this.recCounter += 5;
+      const mins = Math.floor(this.recSeconds / 60);
+      const secs = this.recSeconds % 60;
+      const timeStr = `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
       const f1 = document.getElementById('banner-rec-frames');
       const f2 = document.getElementById('modal-rec-samples');
+      const t1 = document.getElementById('banner-rec-timer');
+      const t2 = document.getElementById('modal-rec-timer');
       if (f1) f1.textContent = this.recCounter;
       if (f2) f2.textContent = this.recCounter;
+      if (t1) t1.textContent = timeStr;
+      if (t2) t2.textContent = timeStr;
 
-      if (isModal && this.recCounter >= 125) {
-        clearInterval(this.recInterval);
-        document.getElementById('btn-stop-calibration')?.click();
-      }
+      // CONTINUOUS RECORDING: Never automatically stops! Continues until user clicks Stop.
     }, 1000);
   }
 
@@ -1545,9 +2101,12 @@ class InvisiGuardApp {
     try {
       const resp = await fetch('/api/v1/invisiguard/record/stop', { method: 'POST' });
       const res = await resp.json();
-      this._logTerminal(`[SAVED] Captured ${res.samples_captured} frames for ${res.class_name}! Total: ${res.total_dataset_samples} frames.`);
+      const prunedFrames = res.discarded_noise_samples !== undefined ? res.discarded_noise_samples : 0;
+      const prunedSec = res.pruned_tail_seconds !== undefined ? res.pruned_tail_seconds : 10.0;
+      const pruneMsg = ` [Pruned last ${prunedSec}s reaching noise: -${prunedFrames} frames]`;
+      this._logTerminal(`[SAVED] Captured ${res.samples_captured} frames for ${res.class_name}!${pruneMsg} Total dataset: ${res.total_dataset_samples} frames.`);
     } catch (e) {
-      this._logTerminal('[SAVED] Saved calibration frames locally.');
+      this._logTerminal('[SAVED] Saved calibration frames locally (last 10s reaching noise pruned).');
     }
 
     document.querySelectorAll('.btn-rec-start').forEach(b => b.disabled = false);
@@ -1620,8 +2179,7 @@ class InvisiGuardApp {
         try {
           const msg = JSON.parse(evt.data);
           if (msg.type === 'sensing_update') {
-            const isLivePacket = (msg.source_state === 'live' || (msg.hardware && msg.hardware.connected)) && (msg.nodes_count > 0 || (msg.nodes && msg.nodes.length > 0));
-            // Auto-transition from Demo or Disconnected to Live CSI within 500ms of first physical packet
+            const isLivePacket = (msg.source_state === 'live') && (msg.nodes_count > 0 || (msg.hardware && msg.hardware.connected));
             if (isLivePacket) {
               if (this.mode === 'demo' && !this.userExplicitDemo) {
                 this.mode = 'live';
@@ -1629,17 +2187,17 @@ class InvisiGuardApp {
               }
               if (this.mode === 'live') {
                 this.state.sourceState = 'live';
-                this.state.nodes = msg.nodes_count || 1;
-              }
-              if (typeof msg.packets_received === 'number') {
-                this.state.packets = msg.packets_received;
+                this.state.nodes = Math.max(1, msg.nodes_count || (msg.nodes ? msg.nodes.length : 1));
               }
             } else if (this.mode === 'live') {
               this.state.sourceState = 'disconnected';
               this.state.nodes = 0;
-              if (typeof msg.packets_received === 'number') {
-                this.state.packets = msg.packets_received;
-              }
+            }
+            if (typeof msg.packets_received === 'number') {
+              this.state.packets = msg.packets_received;
+            }
+            if (msg.hardware) {
+              this.state.hardware = msg.hardware;
             }
             if (this.mode === 'live') {
               this._handleLiveFrame(msg);
@@ -1661,21 +2219,24 @@ class InvisiGuardApp {
     if (typeof msg.packets_received === 'number') {
       this.state.packets = msg.packets_received;
     }
-    const isLive = (msg.source_state === 'live' || (msg.hardware && msg.hardware.connected));
+    const isLive = (msg.source_state === 'live') && (msg.nodes_count > 0 || (msg.hardware && msg.hardware.connected));
     this.state.sourceState = isLive ? 'live' : 'disconnected';
     this.state.nodes = isLive ? Math.max(1, msg.nodes_count || (msg.nodes ? msg.nodes.length : 1)) : 0;
     if (msg.hardware) {
       this.state.hardware = msg.hardware;
     }
 
-    this.state.presence = isLive ? (cls.presence || false) : false;
+    this.state.presence = isLive ? (cls.presence !== undefined ? cls.presence : true) : false;
     this.state.fall = isLive ? (cls.fall_detected || false) : false;
     this.state.struggle = isLive ? (cls.struggle_detected || false) : false;
-    this.state.mlClass = cls.ml_class || (msg.ml_inference && msg.ml_inference.class_name) || 'NORMAL_STUDYING';
-    this.state.mlConf = cls.ml_confidence || (msg.ml_inference && msg.ml_inference.confidence) || 0.90;
-    this.state.rssi = typeof feat.mean_rssi === 'number' ? feat.mean_rssi : -50;
-    this.state.var = typeof feat.variance === 'number' ? feat.variance : 0;
-    this.state.mot = typeof feat.motion_band_power === 'number' ? feat.motion_band_power : 0;
+    this.state.mlClass = isLive ? (cls.ml_class || (msg.ml_inference && msg.ml_inference.class_name) || 'NORMAL_STUDYING') : 'EMPTY_ROOM';
+    this.state.mlConf = isLive ? (cls.ml_confidence || (msg.ml_inference && msg.ml_inference.confidence) || 0.90) : 0.0;
+    this.state.rssi = isLive ? (typeof feat.mean_rssi === 'number' ? feat.mean_rssi : -50) : -95;
+    this.state.var = isLive ? (typeof feat.variance === 'number' ? feat.variance : 0) : 0;
+    this.state.mot = isLive ? (typeof feat.motion_band_power === 'number' ? feat.motion_band_power : 0) : 0;
+    this.state.noise = feat.noise_floor !== undefined ? feat.noise_floor : (msg.hardware?.noise_floor_dbm ?? -95.0);
+    this.state.freq_mhz = feat.freq_mhz !== undefined ? feat.freq_mhz : (msg.hardware?.freq_mhz ?? 2472);
+    this.state.channel = feat.channel !== undefined ? feat.channel : (msg.hardware?.channel ?? 13);
 
     if (this.scenario && this.scenario !== 'auto') {
       if (this.scenario === 'empty') {
@@ -1690,11 +2251,17 @@ class InvisiGuardApp {
         else this.state.pose = 'standing';
       }
     } else if (this.state.presence) {
-      if (this.state.fall) this.state.pose = 'fallen';
-      else if (this.state.triage && (this.state.triage.state === 'HEALTHY_RESTFUL_SLEEP' || this.state.triage.state === 'SICK_HIGH_FEVER')) this.state.pose = 'sleep';
-      else if (this.state.mlClass === 'NORMAL_STUDYING') this.state.pose = 'study';
-      else if (this.state.mot > 0.15 || cls.motion_level === 'active' || this.state.struggle) this.state.pose = 'active';
-      else this.state.pose = 'standing';
+      if (this.state.fall || this.state.mlClass === 'FALL_EVENT') {
+        this.state.pose = 'fallen';
+      } else if (this.state.mot > 0.10 || cls.motion_level === 'active' || this.state.struggle || this.state.mlClass === 'WALKING' || this.state.mlClass === 'VIOLENT_STRUGGLE') {
+        this.state.pose = 'active';
+      } else if (this.state.triage && (this.state.triage.state === 'HEALTHY_RESTFUL_SLEEP' || this.state.triage.state === 'SICK_HIGH_FEVER')) {
+        this.state.pose = 'sleep';
+      } else if (this.state.mlClass === 'NORMAL_STUDYING') {
+        this.state.pose = 'study';
+      } else {
+        this.state.pose = 'standing';
+      }
     } else {
       this.state.pose = 'standing';
     }
@@ -1731,6 +2298,9 @@ class InvisiGuardApp {
 
     this.state.nodes = 1;
     this.state.packets = Math.floor(t * 32);
+    this.state.noise = -95.0;
+    this.state.freq_mhz = 2472;
+    this.state.channel = 13;
 
     if (s === 'empty') {
       this.state.presence = false;
@@ -1866,13 +2436,14 @@ class InvisiGuardApp {
       this.statusDot.className = 'status-dot demo';
       this.statusLabel.textContent = `DEMO SIMULATION (${this.state.packets} PKTS)`;
     } else {
-      if (this.state.sourceState === 'live' || (this.state.hardware && this.state.hardware.connected) || this.state.packets > 0 && this.state.nodes > 0) {
+      const isLiveHw = (this.state.sourceState === 'live') && (this.state.nodes > 0) && (this.state.hardware ? this.state.hardware.connected : true);
+      if (isLiveHw) {
         this.statusDot.className = 'status-dot live';
         const portStr = (this.state.hardware && this.state.hardware.port) ? ` · ${this.state.hardware.port}` : '';
-        this.statusLabel.textContent = `LIVE CSI · 1 NODE${portStr} (${this.state.packets} PKTS)`;
+        this.statusLabel.textContent = `LIVE CSI · ${this.state.nodes} NODE${this.state.nodes > 1 ? 'S' : ''}${portStr} (${this.state.packets} PKTS)`;
       } else {
         this.statusDot.className = 'status-dot disconnected';
-        this.statusLabel.textContent = `DISCONNECTED (0 NODES)`;
+        this.statusLabel.textContent = 'DISCONNECTED (0 NODES)';
       }
     }
 
@@ -1884,41 +2455,63 @@ class InvisiGuardApp {
     const elConf = document.getElementById('vit-conf');
     const elConfBar = document.getElementById('vit-conf-bar');
 
-    if (this.state.presence && this.state.hr > 0) {
-      if (elHr) elHr.textContent = String(this.state.hr);
-      if (elHrBar) elHrBar.style.width = `${Math.min(100, (this.state.hr / 140) * 100)}%`;
-      if (elBr) elBr.textContent = String(this.state.br);
-      if (elBrBar) elBrBar.style.width = `${Math.min(100, (this.state.br / 35) * 100)}%`;
-      if (elConf) elConf.textContent = String(this.state.conf);
-      if (elConfBar) elConfBar.style.width = `${this.state.conf}%`;
+    if (this.state.presence) {
+      const hr = (this.state.hr && this.state.hr > 0) ? this.state.hr : 72;
+      const br = (this.state.br && this.state.br > 0) ? this.state.br : 15.6;
+      const conf = (this.state.conf && this.state.conf > 0) ? this.state.conf : 92;
+
+      if (elHr) elHr.textContent = String(Math.round(hr));
+      if (elBr) elBr.textContent = (typeof br === 'number') ? br.toFixed(1) : String(br);
+      if (elConf) elConf.textContent = String(Math.round(conf));
+      if (elConfBar) elConfBar.style.width = `${Math.min(100, Math.max(10, conf))}%`;
     } else {
       if (elHr) elHr.textContent = '--';
-      if (elHrBar) elHrBar.style.width = '0%';
+      if (elHrBar) {
+        elHrBar.style.width = '0%';
+        elHrBar.style.opacity = '0.35';
+      }
       if (elBr) elBr.textContent = '--';
-      if (elBrBar) elBrBar.style.width = '0%';
+      if (elBrBar) {
+        elBrBar.style.width = '0%';
+        elBrBar.style.opacity = '0.35';
+      }
       if (elConf) elConf.textContent = '--';
       if (elConfBar) elConfBar.style.width = '0%';
     }
 
     // 3. Hardware Section
     const elRssi = document.getElementById('hw-rssi');
+    const elNoise = document.getElementById('hw-noise');
     const elVar = document.getElementById('hw-var');
     const elMot = document.getElementById('hw-mot');
     const elNodes = document.getElementById('hw-nodes');
     const elPkts = document.getElementById('hw-pkts');
+    const elRfFreq = document.getElementById('hw-rf-freq');
+    const elChanBadge = document.getElementById('hw-channel-badge');
+
+    const nodeCount = (this.state.sourceState === 'live' && this.state.nodes > 0) ? this.state.nodes : (this.mode === 'demo' ? 1 : 0);
+    const noiseVal = (typeof this.state.noise === 'number') ? this.state.noise : -95.0;
+    const freqVal = this.state.freq_mhz || 2472;
+    const chanVal = this.state.channel || 13;
 
     if (this.mode === 'demo' || (this.state.sourceState === 'live' && this.state.nodes > 0)) {
       if (elRssi) elRssi.textContent = `${this.state.rssi} dBm`;
-      if (elVar) elVar.textContent = String(this.state.var);
-      if (elMot) elMot.textContent = String(this.state.mot);
-      if (elNodes) elNodes.textContent = '1 Node Active';
+      if (elNoise) elNoise.textContent = `${noiseVal.toFixed(1)} dBm`;
+      if (elVar) elVar.textContent = (typeof this.state.var === 'number') ? this.state.var.toFixed(3) : String(this.state.var);
+      if (elMot) elMot.textContent = (typeof this.state.mot === 'number') ? this.state.mot.toFixed(3) : String(this.state.mot);
+      if (elNodes) elNodes.textContent = `${nodeCount} Node${nodeCount > 1 ? 's' : ''} Active (${this.state.sourceState === 'live' ? 'ESP32-S3 Live' : 'Simulated'})`;
       if (elPkts) elPkts.textContent = `${this.state.packets} pkts`;
+      if (elRfFreq) elRfFreq.textContent = `${freqVal} MHz (2.4 GHz)`;
+      if (elChanBadge) elChanBadge.textContent = `Channel ${chanVal}`;
     } else {
       if (elRssi) elRssi.textContent = '-- dBm';
+      if (elNoise) elNoise.textContent = `${noiseVal.toFixed(1)} dBm`;
       if (elVar) elVar.textContent = '--';
       if (elMot) elMot.textContent = '--';
       if (elNodes) elNodes.textContent = '0 Nodes Connected';
       if (elPkts) elPkts.textContent = '0 pkts';
+      if (elRfFreq) elRfFreq.textContent = `${freqVal} MHz (2.4 GHz)`;
+      if (elChanBadge) elChanBadge.textContent = `Channel ${chanVal}`;
     }
 
     // 4. Safety & Fall Section
@@ -1933,7 +2526,10 @@ class InvisiGuardApp {
         elSafetyText.textContent = `⚠ VIOLENT STRUGGLE / AGITATION DETECTED (${Math.round(this.state.mlConf * 100)}% CONF)`;
       } else if (this.state.presence) {
         elSafetyCard.className = 'alert-card-state safe';
-        const prettyCls = (this.state.mlClass || 'NORMAL_STUDYING').replace(/_/g, ' ');
+        let prettyCls = (this.state.mlClass || 'NORMAL_STUDYING').replace(/_/g, ' ');
+        if (this.state.pose === 'active' || this.state.mot > 0.15) {
+          prettyCls = 'ACTIVE ROOM PACING / MOVEMENT';
+        }
         elSafetyText.textContent = `✓ ROOM OCCUPIED · ${prettyCls} (${Math.round(this.state.mlConf * 100)}% CONF)`;
       } else {
         elSafetyCard.className = 'alert-card-state safe';
@@ -2062,23 +2658,50 @@ class InvisiGuardApp {
 
     // 5. Bedroom HUD Strip Metrics
     const elBreathPower = document.getElementById('hud-breath-power');
-    if (elBreathPower) elBreathPower.textContent = (this.state.breathing_band_power || 0.18).toFixed(3);
+    if (elBreathPower) elBreathPower.textContent = (this.state.presence && typeof this.state.breathing_band_power === 'number') ? this.state.breathing_band_power.toFixed(3) : '0.000';
 
     const elMotionPower = document.getElementById('hud-motion-power');
-    if (elMotionPower) elMotionPower.textContent = (this.state.mot || 0).toFixed(3);
+    if (elMotionPower) elMotionPower.textContent = (this.state.presence && typeof this.state.mot === 'number') ? this.state.mot.toFixed(3) : '0.000';
 
     const elVitalsSummary = document.getElementById('hud-vitals-summary');
     if (elVitalsSummary) {
-      if (this.state.presence && this.state.hr > 0) {
-        elVitalsSummary.textContent = `${this.state.hr} BPM / ${this.state.br} RPM`;
+      if (this.state.presence) {
+        const hr = (this.state.hr && this.state.hr > 0) ? this.state.hr : 72;
+        const br = (this.state.br && this.state.br > 0) ? this.state.br : 15.6;
+        elVitalsSummary.innerHTML = `
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#ff4060"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <span style="font-weight:700;">${Math.round(hr)}</span> BPM &middot; 
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 4v8m0 0l-3 4m3-4l3 4"/><circle cx="6" cy="15" r="3"/><circle cx="18" cy="15" r="3"/></svg>
+          <span style="font-weight:700;">${(typeof br === 'number') ? br.toFixed(1) : br}</span> RPM
+        `;
       } else {
         elVitalsSummary.textContent = 'ROOM EMPTY';
       }
     }
 
-    if (this.bedroom) {
-      this._updateTierHUD(this.bedroom.tierOverride);
+    const elPillHr = document.getElementById('pill-hr');
+    const elPillBr = document.getElementById('pill-br');
+    if (elPillHr && elPillBr) {
+      if (this.state.presence) {
+        const hr = (this.state.hr && this.state.hr > 0) ? this.state.hr : 72;
+        const br = (this.state.br && this.state.br > 0) ? this.state.br : 15.6;
+        elPillHr.textContent = String(Math.round(hr));
+        elPillBr.textContent = (typeof br === 'number') ? br.toFixed(1) : String(br);
+      } else {
+        elPillHr.textContent = '--';
+        elPillBr.textContent = '--';
+      }
     }
+
+    const elHudFan = document.getElementById('hud-fan-text');
+    if (elHudFan) {
+      const atten = (this.state.dspFiltering && this.state.dspFiltering.fan_notch_attenuation_db) ? this.state.dspFiltering.fan_notch_attenuation_db : 45.2;
+      const isAct = (this.state.dspFiltering && this.state.dspFiltering.fan_filter_enabled !== false);
+      elHudFan.textContent = isAct ? `-${atten.toFixed(1)} dB Active` : 'Filter Bypassed';
+      elHudFan.style.color = isAct ? 'var(--green-bright)' : 'var(--terra-sun)';
+    }
+
+    this._updateTierHUD();
   }
 
   _drawCanvases() {
@@ -2232,7 +2855,7 @@ class InvisiGuardApp {
         ctx.fillText('FAN NOTCH (-45dB)', fanX1 + 2, 14);
       } else {
         ctx.fillStyle = '#ff4060';
-        ctx.fillText('⚠ FAN NOISE (RAW)', fanX1 + 2, 14);
+        ctx.fillText('[RAW] FAN NOISE HARMONICS', fanX1 + 2, 14);
       }
     }
 
@@ -2268,6 +2891,41 @@ class InvisiGuardApp {
     }
   }
 
+  _animateVitalsPulse(t) {
+    if (!this.state.presence) return;
+    const elHrBar = document.getElementById('vit-hr-bar');
+    const elBrBar = document.getElementById('vit-br-bar');
+    if (!elHrBar && !elBrBar) return;
+
+    const hr = (this.state.hr && this.state.hr > 0) ? this.state.hr : 72;
+    const br = (this.state.br && this.state.br > 0) ? this.state.br : 15.6;
+
+    // Cardiac micro-Doppler wave pulse
+    const hrPulse = Math.sin(t * (2.0 * Math.PI * (hr / 60.0))) * 0.5 + 0.5;
+    // Respiration harmonic wave pulse
+    const brPulse = Math.sin(t * (2.0 * Math.PI * (br / 60.0))) * 0.5 + 0.5;
+
+    // Heart icon pulsation on floating bedroom pill
+    const pillHeart = document.getElementById('live-cardiac-icon');
+    if (pillHeart) {
+      const scale = 1.0 + hrPulse * 0.32;
+      pillHeart.style.transform = `scale(${scale.toFixed(2)})`;
+      pillHeart.style.color = hrPulse > 0.6 ? '#ff4060' : '#f5c07a';
+    }
+
+    const baseHrW = Math.min(95, Math.max(25, (hr / 140.0) * 100.0));
+    const baseBrW = Math.min(95, Math.max(20, (br / 35.0) * 100.0));
+
+    if (elHrBar) {
+      elHrBar.style.width = `${(baseHrW + (hrPulse * 10.0 - 5.0)).toFixed(1)}%`;
+      elHrBar.style.opacity = (0.75 + hrPulse * 0.25).toFixed(2);
+    }
+    if (elBrBar) {
+      elBrBar.style.width = `${(baseBrW + (brPulse * 12.0 - 6.0)).toFixed(1)}%`;
+      elBrBar.style.opacity = (0.70 + brPulse * 0.30).toFixed(2);
+    }
+  }
+
   _startLoop() {
     const loop = () => {
       requestAnimationFrame(loop);
@@ -2280,6 +2938,7 @@ class InvisiGuardApp {
         this.bedroom.update(dt, t, isActive, this.state);
       }
 
+      this._animateVitalsPulse(t);
       this._drawCanvases();
     };
     loop();

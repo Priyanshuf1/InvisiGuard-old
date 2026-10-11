@@ -107,6 +107,12 @@ void csi_collector_start_hop_timer(void);
 void csi_collector_enable_data_capture(void);
 
 /**
+ * Explicitly set the radio channel for CSI collection (1-14).
+ * Calls esp_wifi_set_channel() and updates the primary hop channel.
+ */
+esp_err_t csi_collector_set_channel(uint8_t channel);
+
+/**
  * Inject an NDP (Null Data Packet) frame for sensing.
  *
  * Uses esp_wifi_80211_tx() to send a preamble-only frame (~24 us airtime)

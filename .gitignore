@@ -325,3 +325,9 @@ scripts/fal-visual-teacher/output/
 
 # Agent execution scratchpads and audit logs
 .agents/
+
+# InvisiGuard local backups and scratch files
+invisiguard/data/backups/
+*.bak
+scratch_test_ws.py
+

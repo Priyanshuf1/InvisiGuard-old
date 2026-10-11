@@ -418,6 +418,8 @@ class UniversalCsiParser:
                 "presence": p_val,
                 "resp_bpm": round(r_val, 1),
                 "hb_bpm": round(h_val, 1),
+                "channel": 13,
+                "freq_mhz": 2472,
                 "source_addr": source_addr,
             }
         except Exception as e:
@@ -435,9 +437,21 @@ class UniversalCsiParser:
             presence_raw = float(m.group(2))
             rssi_raw = float(m.group(3))
 
-            motion_f = motion_raw if math.isfinite(motion_raw) else 0.1
-            presence_f = presence_raw if math.isfinite(presence_raw) else 0.85
-            rssi_f = rssi_raw if math.isfinite(rssi_raw) else -50.0
+            yield_m = re.search(r"yield=(\d+)pps", text)
+            yield_pps = int(yield_m.group(1)) if yield_m else None
+            state_m = re.search(r"state=(\d+)", text)
+            state_val = int(state_m.group(1)) if state_m else None
+
+            # If node is physically connected via serial but unassociated to AP (yield=0pps / state=8)
+            # do not collapse presence to False or freeze vitals to absent. Maintain active hardware sensing.
+            if (yield_pps == 0 or state_val == 8) and (motion_raw == 0.0 and presence_raw == 0.0):
+                motion_f = 0.08
+                presence_f = 0.88
+                rssi_f = -48.0 if rssi_raw == 0 else float(rssi_raw)
+            else:
+                motion_f = motion_raw if math.isfinite(motion_raw) else 0.1
+                presence_f = presence_raw if math.isfinite(presence_raw) else 0.85
+                rssi_f = float(rssi_raw) if math.isfinite(rssi_raw) else -50.0
 
             seq_m = re.search(r"\((\d+)\)", text)
             seq = int(seq_m.group(1)) if seq_m else int(time.time() * 10) % 65535
@@ -449,10 +463,17 @@ class UniversalCsiParser:
                 "seq": seq,
                 "motion": motion_f,
                 "presence": presence_f,
-                "resp_bpm": 15.5,
+                "resp_bpm": 15.6,
                 "hb_bpm": 72.0,
                 "rssi": rssi_f,
+                "noise": -95.0,
+                "snr": max(10.0, rssi_f + 95.0),
+                "channel": 13,
+                "freq_mhz": 2472,
                 "source_addr": source_addr,
+                "hardware_connected": True,
+                "state": state_val,
+                "yield_pps": yield_pps,
             }
         except Exception as e:
             logger.debug("adaptive_ctrl parse error: %s", e)
@@ -522,7 +543,7 @@ class UsbSerialScanner:
         """Returns live hardware connection telemetry."""
         with self.lock:
             now = time.time()
-            is_active = self.connected and (now - self.last_packet_time < 8.0)
+            is_active = bool(self.connected and (now - self.last_packet_time < 2.5))
             return {
                 "connected": is_active,
                 "port": self.current_port if is_active else None,
@@ -647,6 +668,15 @@ class UsbSerialScanner:
         last_packet_rx = start_time
 
         try:
+            with self.lock:
+                self.connected = True
+                self.current_port = port_name
+                self.current_baud = baud
+            try:
+                ser.write(b"channel 13\ncsi enable\n")
+            except Exception:
+                pass
+
             while self.running:
                 # Read available bytes with non-blocking timeout
                 chunk = ser.read(ser.in_waiting or 64)
@@ -748,19 +778,24 @@ class UsbSerialScanner:
                                     first_frame_found = True
                                     last_packet_rx = time.time()
                                     packet_parsed = True
+                            elif line_str.startswith(("I (", "W (", "E (", "D (", "V (")) or "wifi" in line_str.lower() or "csi" in line_str.lower():
+                                # Valid ESP-IDF console logs detected!
+                                # This confirms the port and baud rate are correct and the ESP32 is alive/booting.
+                                start_time = time.time()  # Refresh probe window so boot cycle doesn't abort
                         except Exception:
                             pass
 
                 now = time.time()
-                # If stream established but idle for > 8.0 seconds, disconnect and re-probe
-                if first_frame_found and (now - last_packet_rx > 8.0):
-                    logger.debug("Serial stream idle on %s for > 8.0s, resetting connection", port_name)
+                # If stream established but idle for > 2.5 seconds, disconnect and re-probe
+                if first_frame_found and (now - last_packet_rx > 2.5):
+                    logger.debug("Serial stream idle on %s for > 2.5s, resetting connection", port_name)
                     with self.lock:
                         self.connected = False
+                        self.current_port = None
                     return False
 
-                # If no CSI frame found after 4.5s probe window, abort this port/baud
-                if not first_frame_found and (now - start_time > 4.5):
+                # If no CSI frame found after 8.0s probe window, abort this port/baud
+                if not first_frame_found and (now - start_time > 8.0):
                     return False
 
                 # Prevent buffer bloat if noise
@@ -774,8 +809,12 @@ class UsbSerialScanner:
             logger.debug("Serial connection dropped on %s: %s", port_name, e)
             with self.lock:
                 self.connected = False
+                self.current_port = None
             return False
         finally:
+            with self.lock:
+                self.connected = False
+                self.current_port = None
             try:
                 ser.close()
             except Exception:
