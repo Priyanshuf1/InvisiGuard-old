@@ -979,6 +979,7 @@ class InvisiGuardMLEngine:
         self.recording_class_name = "EMPTY_ROOM"
         self.recording_start_time = 0.0
         self.recorded_samples: List[List[float]] = []
+        self.recorded_samples_ts: List[Tuple[float, List[Any]]] = []
         self.recorded_amplitudes: List[List[float]] = []
         self.last_variance = 1.0
         self.rssi_window: deque = deque(maxlen=10)
@@ -1116,14 +1117,15 @@ class InvisiGuardMLEngine:
             # Prune / discard the last 10 seconds of captured frames before the user taps "Stop Recording"
             # to remove the noise of reaching for the laptop/mouse.
             cutoff_t = now - 10.0
-            pruned_samples = [feat for (ts, feat) in self.recorded_samples_ts if ts <= cutoff_t]
-            discarded_count = len(self.recorded_samples_ts) - len(pruned_samples)
+            ts_samples = getattr(self, "recorded_samples_ts", [])
+            pruned_samples = [feat for (ts, feat) in ts_samples if ts <= cutoff_t]
+            discarded_count = len(ts_samples) - len(pruned_samples)
 
             # If recording was shorter than 15s or pruned too much, keep at least the first 50% of frames
-            if len(pruned_samples) < 5 and len(self.recorded_samples_ts) > 0:
-                half = max(5, len(self.recorded_samples_ts) // 2)
-                pruned_samples = [feat for (ts, feat) in self.recorded_samples_ts[:half]]
-                discarded_count = len(self.recorded_samples_ts) - len(pruned_samples)
+            if len(pruned_samples) < 5 and len(ts_samples) > 0:
+                half = max(5, len(ts_samples) // 2)
+                pruned_samples = [feat for (ts, feat) in ts_samples[:half]]
+                discarded_count = len(ts_samples) - len(pruned_samples)
 
             self.recorded_samples = pruned_samples
             n_samples = len(self.recorded_samples)
