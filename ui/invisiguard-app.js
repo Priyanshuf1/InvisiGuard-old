@@ -1661,9 +1661,9 @@ class InvisiGuardApp {
     if (typeof msg.packets_received === 'number') {
       this.state.packets = msg.packets_received;
     }
-    const isLive = (msg.source_state === 'live' || (msg.hardware && msg.hardware.connected)) && (msg.nodes_count > 0 || (msg.nodes && msg.nodes.length > 0));
+    const isLive = (msg.source_state === 'live' || (msg.hardware && msg.hardware.connected));
     this.state.sourceState = isLive ? 'live' : 'disconnected';
-    this.state.nodes = isLive ? (msg.nodes_count || 1) : 0;
+    this.state.nodes = isLive ? Math.max(1, msg.nodes_count || (msg.nodes ? msg.nodes.length : 1)) : 0;
     if (msg.hardware) {
       this.state.hardware = msg.hardware;
     }
@@ -1866,9 +1866,10 @@ class InvisiGuardApp {
       this.statusDot.className = 'status-dot demo';
       this.statusLabel.textContent = `DEMO SIMULATION (${this.state.packets} PKTS)`;
     } else {
-      if ((this.state.sourceState === 'live' || this.state.packets > 0) && this.state.nodes > 0) {
+      if (this.state.sourceState === 'live' || (this.state.hardware && this.state.hardware.connected) || this.state.packets > 0 && this.state.nodes > 0) {
         this.statusDot.className = 'status-dot live';
-        this.statusLabel.textContent = `LIVE CSI · 1 NODE (${this.state.packets} PKTS)`;
+        const portStr = (this.state.hardware && this.state.hardware.port) ? ` · ${this.state.hardware.port}` : '';
+        this.statusLabel.textContent = `LIVE CSI · 1 NODE${portStr} (${this.state.packets} PKTS)`;
       } else {
         this.statusDot.className = 'status-dot disconnected';
         this.statusLabel.textContent = `DISCONNECTED (0 NODES)`;

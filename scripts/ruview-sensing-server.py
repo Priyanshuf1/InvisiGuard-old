@@ -496,16 +496,25 @@ class SensingState:
     def get_hardware_status(self) -> Dict[str, Any]:
         with self.lock:
             now = time.time()
-            is_active = (self.packets_received > 0) and (now - self.last_packet_time < 5.0)
+            ser_active = False
+            ser_port = None
+            ser_baud = None
+            if "usb_serial_scanner" in globals() and usb_serial_scanner is not None:
+                st = usb_serial_scanner.get_status()
+                if st.get("connected"):
+                    ser_active = True
+                    ser_port = st.get("port")
+                    ser_baud = st.get("baud_rate")
+            is_active = ser_active or ((self.packets_received > 0) and (now - self.last_packet_time < 8.0))
             return {
                 "connected": is_active,
-                "port": self.last_port if is_active else None,
-                "baud_rate": self.last_baud if is_active else None,
+                "port": (ser_port or self.last_port) if is_active else None,
+                "baud_rate": (ser_baud or self.last_baud) if is_active else None,
                 "packet_rate_hz": self.get_packet_rate_hz() if is_active else 0.0,
                 "snr_db": round(self.last_snr_db, 1) if is_active else 0.0,
                 "packets_received": self.packets_received,
                 "last_packet_time": self.last_packet_time,
-                "transport": self.last_transport if is_active else "none",
+                "transport": ("serial" if ser_active else self.last_transport) if is_active else "none",
                 "protocol": self.last_protocol if is_active else "none",
                 "last_dsp_latency_ms": round(self.last_dsp_latency_ms, 3),
             }
@@ -1395,9 +1404,9 @@ def build_sensing_update_message(snap: Dict[str, Any]) -> str:
             }
         ] if snap["presence"] else [],
         "signal_field": signal_field,
-        "source_state": "live" if (snap["packets_received"] > 0 and (time.time() - snap.get("last_packet_time", 0.0) < 5.0)) else ("idle" if snap["packets_received"] > 0 else "disconnected"),
+        "source_state": "live" if (snap.get("hardware", {}).get("connected") or (snap["packets_received"] > 0 and (time.time() - snap.get("last_packet_time", 0.0) < 8.0))) else ("idle" if snap["packets_received"] > 0 else "disconnected"),
         "packets_received": snap["packets_received"],
-        "nodes_count": 1 if (snap["packets_received"] > 0 and (time.time() - snap.get("last_packet_time", 0.0) < 5.0)) else 0,
+        "nodes_count": 1 if (snap.get("hardware", {}).get("connected") or (snap["packets_received"] > 0 and (time.time() - snap.get("last_packet_time", 0.0) < 8.0))) else 0,
         "hardware": snap.get("hardware", global_state.get_hardware_status()),
     }
     return json.dumps(msg)

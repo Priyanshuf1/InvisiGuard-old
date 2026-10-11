@@ -467,7 +467,7 @@ class UsbSerialScanner:
     Runs non-blocking in a background daemon thread.
     """
 
-    SUPPORTED_BAUDS = [115200, 921600]
+    SUPPORTED_BAUDS = [921600, 115200]
 
     def __init__(self, on_packet_callback: Optional[Callable[[Dict[str, Any]], None]] = None):
         self.on_packet_callback = on_packet_callback
@@ -522,7 +522,7 @@ class UsbSerialScanner:
         """Returns live hardware connection telemetry."""
         with self.lock:
             now = time.time()
-            is_active = self.connected and (now - self.last_packet_time < 4.0)
+            is_active = self.connected and (now - self.last_packet_time < 8.0)
             return {
                 "connected": is_active,
                 "port": self.current_port if is_active else None,
@@ -627,9 +627,9 @@ class UsbSerialScanner:
 
                 if not connected_to_port:
                     with self.lock:
-                        if time.time() - self.last_packet_time >= 4.0:
+                        if time.time() - self.last_packet_time >= 8.0:
                             self.connected = False
-                    time.sleep(2.0)
+                    time.sleep(1.0)
 
             except Exception as e:
                 logger.debug("Serial scan loop exception: %s", e)
@@ -752,15 +752,15 @@ class UsbSerialScanner:
                             pass
 
                 now = time.time()
-                # If stream established but idle for > 4.5 seconds, disconnect and re-probe
-                if first_frame_found and (now - last_packet_rx > 4.5):
-                    logger.debug("Serial stream idle on %s for > 4.5s, resetting connection", port_name)
+                # If stream established but idle for > 8.0 seconds, disconnect and re-probe
+                if first_frame_found and (now - last_packet_rx > 8.0):
+                    logger.debug("Serial stream idle on %s for > 8.0s, resetting connection", port_name)
                     with self.lock:
                         self.connected = False
                     return False
 
-                # If no CSI frame found after 1.8s probe window, abort this port/baud
-                if not first_frame_found and (now - start_time > 1.8):
+                # If no CSI frame found after 4.5s probe window, abort this port/baud
+                if not first_frame_found and (now - start_time > 4.5):
                     return False
 
                 # Prevent buffer bloat if noise
